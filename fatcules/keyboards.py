@@ -13,6 +13,8 @@ CANCEL = "Cancel"
 SKIP_FAT = "Skip fat %"
 DATEPICKER_PREFIX = "DP"
 DUPLICATE_PREFIX = "DUP"
+EDIT_SELECT_PREFIX = "EDITSEL"
+EDIT_PAGE_SIZE = 5
 
 
 def main_keyboard() -> ReplyKeyboardMarkup:
@@ -163,3 +165,63 @@ def parse_duplicate_decision(data: str) -> tuple[str, str] | None:
         return None
     _, prefix, action = parts
     return prefix, action
+
+
+def _entry_label(entry: dict) -> str:
+    recorded_at = entry.get("recorded_at")
+    weight = entry.get("weight_kg")
+    fat = entry.get("fat_pct")
+    date_text = recorded_at[:10] if isinstance(recorded_at, str) else str(recorded_at)
+    base = f"{date_text}: {float(weight):.1f} kg" if weight is not None else str(entry)
+    if fat is None:
+        return base
+    return f"{base}, fat {float(fat):.1f}%"
+
+
+def edit_entries_keyboard(entries: list[dict], page: int = 0, page_size: int = EDIT_PAGE_SIZE) -> InlineKeyboardMarkup:
+    total = len(entries)
+    total_pages = max(1, (total + page_size - 1) // page_size)
+    page = max(0, min(page, total_pages - 1))
+    start = page * page_size
+    end = min(start + page_size, total)
+    rows: list[list[InlineKeyboardButton]] = []
+    for idx, entry in enumerate(entries[start:end], start=start):
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=_entry_label(entry),
+                    callback_data=f"{EDIT_SELECT_PREFIX}|pick|{idx}",
+                )
+            ]
+        )
+    nav_buttons: list[InlineKeyboardButton] = [
+        InlineKeyboardButton(text="Cancel", callback_data=f"{EDIT_SELECT_PREFIX}|cancel|0")
+    ]
+    if total_pages > 1:
+        if page > 0:
+            nav_buttons.insert(
+                0, InlineKeyboardButton(text="◀ Prev", callback_data=f"{EDIT_SELECT_PREFIX}|page|{page-1}")
+            )
+        if page < total_pages - 1:
+            nav_buttons.append(
+                InlineKeyboardButton(text="Next ▶", callback_data=f"{EDIT_SELECT_PREFIX}|page|{page+1}")
+            )
+        nav_buttons.append(
+            InlineKeyboardButton(text=f"{page+1}/{total_pages}", callback_data=f"{EDIT_SELECT_PREFIX}|noop|0")
+        )
+    rows.append(nav_buttons)
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def parse_edit_selection_data(data: str) -> tuple[str, int] | None:
+    if not data or not data.startswith(f"{EDIT_SELECT_PREFIX}|"):
+        return None
+    parts = data.split("|", maxsplit=2)
+    if len(parts) != 3:
+        return None
+    action, payload = parts[1], parts[2]
+    try:
+        value = int(payload)
+    except ValueError:
+        value = 0
+    return action, value

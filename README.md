@@ -11,7 +11,7 @@ Python Telegram bot for tracking weight and fat percentage using aiogram v3 and 
 ## Product requirements
 - Virtual keyboard with buttons:
   - Add a new entry with weight and optionally fat percentage.
-  - Edit an entry (numbered list to select which entry to edit).
+  - Edit an entry (paginated inline buttons to select which entry to edit).
   - Remove an entry (numbered list to select which entry to delete).
   - Get statistics.
 - If a date already has an entry, users choose to replace existing data, pick a different date, or keep the current entry.

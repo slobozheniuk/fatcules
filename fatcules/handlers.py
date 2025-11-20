@@ -14,6 +14,7 @@ from .keyboards import (
     CANCEL,
     DATEPICKER_PREFIX,
     DUPLICATE_PREFIX,
+    EDIT_SELECT_PREFIX,
     EDIT_ENTRY,
     REMOVE_ENTRY,
     SKIP_FAT,
@@ -23,8 +24,10 @@ from .keyboards import (
     main_keyboard,
     datepicker_keyboard,
     duplicate_date_keyboard,
+    edit_entries_keyboard,
     parse_datepicker_data,
     parse_duplicate_decision,
+    parse_edit_selection_data,
 )
 from .states import AddEntryState, EditEntryState, RemoveEntryState
 from .stats import average_daily_drop, build_plot, parse_series
@@ -101,33 +104,11 @@ async def edit_entry_start(message: Message, state: FSMContext) -> None:
     if not entries:
         await message.answer("No entries to edit yet.", reply_markup=main_keyboard())
         return
-    lines = [format_entry_line(entry, index=i + 1) for i, entry in enumerate(entries)]
     await state.set_state(EditEntryState.choosing_entry)
-    await state.update_data(entries=entries)
+    await state.update_data(entries=entries, edit_page=0)
     await message.answer(
-        "Pick an entry number to edit:\n" + "\n".join(lines),
-        reply_markup=cancel_keyboard(),
-    )
-
-
-@router.message(EditEntryState.choosing_entry)
-async def edit_entry_choose(message: Message, state: FSMContext) -> None:
-    data = await state.get_data()
-    entries = data.get("entries") or []
-    selection = parse_float(message.text or "")
-    if selection is None or int(selection) != selection:
-        await message.answer("Send a number from the list.", reply_markup=cancel_keyboard())
-        return
-    idx = int(selection) - 1
-    if idx < 0 or idx >= len(entries):
-        await message.answer("Out of range. Try again.", reply_markup=cancel_keyboard())
-        return
-    entry = entries[idx]
-    await state.update_data(entry_id=entry["id"], entry_recorded_at=entry["recorded_at"])
-    await state.set_state(EditEntryState.weight)
-    await message.answer(
-        f"Send new weight for {format_entry_line(entry)}",
-        reply_markup=cancel_keyboard(),
+        "Pick an entry to edit:",
+        reply_markup=edit_entries_keyboard(entries, page=0),
     )
 
 
@@ -368,6 +349,49 @@ async def edit_entry_datepicker(callback: CallbackQuery, state: FSMContext) -> N
         reply_markup=main_keyboard(),
     )
     await callback.answer("Updated")
+
+
+@router.callback_query(F.data.startswith(f"{EDIT_SELECT_PREFIX}|"))
+async def edit_entry_selection(callback: CallbackQuery, state: FSMContext) -> None:
+    parsed = parse_edit_selection_data(callback.data or "")
+    if not parsed:
+        await callback.answer()
+        return
+    action, value = parsed
+    if await state.get_state() != EditEntryState.choosing_entry.state:
+        await callback.answer()
+        return
+    data = await state.get_data()
+    entries = data.get("entries") or []
+    page = int(data.get("edit_page") or 0)
+    if action == "page":
+        page = max(0, value)
+        await state.update_data(edit_page=page)
+        if callback.message:
+            await callback.message.edit_reply_markup(reply_markup=edit_entries_keyboard(entries, page=page))
+        await callback.answer()
+        return
+    if action == "cancel":
+        await state.clear()
+        if callback.message:
+            await callback.message.answer("Cancelled. Choose next action.", reply_markup=main_keyboard())
+        await callback.answer()
+        return
+    if action != "pick":
+        await callback.answer()
+        return
+    if value < 0 or value >= len(entries):
+        await callback.answer("Out of range")
+        return
+    entry = entries[value]
+    await state.update_data(entry_id=entry["id"], entry_recorded_at=entry["recorded_at"])
+    await state.set_state(EditEntryState.weight)
+    if callback.message:
+        await callback.message.answer(
+            f"Send new weight for {format_entry_line(entry)}",
+            reply_markup=cancel_keyboard(),
+        )
+    await callback.answer()
 
 
 @router.callback_query(F.data.startswith(f"{DUPLICATE_PREFIX}|add|"))
