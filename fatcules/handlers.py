@@ -3,7 +3,7 @@ from __future__ import annotations
 from aiogram import F, Router
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, ReplyKeyboardMarkup
+from aiogram.types import BufferedInputFile, Message, ReplyKeyboardMarkup
 
 from .db import EntryRepository
 from .formatting import format_entry_line, format_stats_summary, now_utc, parse_float
@@ -227,8 +227,9 @@ async def stats(message: Message, state: FSMContext) -> None:
     latest = await repo.get_latest_fat_weight(user_id=message.from_user.id)  # type: ignore[arg-type]
     summary_text = format_stats_summary(latest, drops)
     plot_image = build_plot(series, summary_text)
+    photo = BufferedInputFile(plot_image.getvalue(), filename="fat-weight.png")
     await message.answer_photo(
-        photo=plot_image,
+        photo=photo,
         caption=summary_text,
         reply_markup=main_keyboard(),
     )

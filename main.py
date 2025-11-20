@@ -19,7 +19,7 @@ async def main() -> None:
         token=settings.bot_token,
         default=DefaultBotProperties(parse_mode="HTML"),
     )
-    bot.repo = repo  # type: ignore[attr-defined]
+    setattr(bot, "repo", repo)  # expose repository to handlers
     dp = Dispatcher()
     dp.include_router(router)
 
