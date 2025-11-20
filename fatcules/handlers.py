@@ -195,12 +195,12 @@ async def remove_entry_start(message: Message, state: FSMContext) -> None:
     if not entries:
         await message.answer("No entries to remove.", reply_markup=main_keyboard())
         return
-    lines = [format_entry_line(entry, index=i + 1) for i, entry in enumerate(entries)]
     await state.set_state(RemoveEntryState.choosing_entry)
-    await state.update_data(entries=entries)
+    await state.update_data(entries=entries, remove_page=0)
+    total_pages = max(1, (len(entries) + EDIT_PAGE_SIZE - 1) // EDIT_PAGE_SIZE)
     await message.answer(
-        "Pick an entry number to delete:\n" + "\n".join(lines),
-        reply_markup=cancel_keyboard(),
+        f"Pick an entry to delete (page 1/{total_pages}):",
+        reply_markup=edit_entries_keyboard(entries, page=0),
     )
 
 
@@ -208,22 +208,40 @@ async def remove_entry_start(message: Message, state: FSMContext) -> None:
 async def remove_entry_choose(message: Message, state: FSMContext) -> None:
     data = await state.get_data()
     entries = data.get("entries") or []
-    selection = parse_float(message.text or "")
-    if selection is None or int(selection) != selection:
-        await message.answer("Send a number from the list.", reply_markup=cancel_keyboard())
+    page = int(data.get("remove_page") or 0)
+    parsed = parse_edit_selection_text(message.text or "")
+    total_pages = max(1, (len(entries) + EDIT_PAGE_SIZE - 1) // EDIT_PAGE_SIZE)
+    if parsed is None:
+        await message.answer(
+            "Use the keyboard buttons to pick an entry or navigate.",
+            reply_markup=edit_entries_keyboard(entries, page=page),
+        )
         return
-    idx = int(selection) - 1
-    if idx < 0 or idx >= len(entries):
-        await message.answer("Out of range. Try again.", reply_markup=cancel_keyboard())
+    action, value = parsed
+    if action == "cancel":
+        await state.clear()
+        await message.answer("Cancelled. Choose next action.", reply_markup=main_keyboard())
         return
-    entry = entries[idx]
-    repo = get_repo(message)
-    deleted = await repo.delete_entry(entry_id=entry["id"], user_id=message.from_user.id)  # type: ignore[arg-type]
-    await state.clear()
-    if not deleted:
-        await message.answer("Could not delete entry.", reply_markup=main_keyboard())
+    if action == "nav":
+        page = max(0, min(total_pages - 1, page + value))
+        await state.update_data(remove_page=page)
+        await message.answer(
+            f"Pick an entry to delete (page {page + 1}/{total_pages}):",
+            reply_markup=edit_entries_keyboard(entries, page=page),
+        )
         return
-    await message.answer(f"Deleted: {format_entry_line(entry)}", reply_markup=main_keyboard())
+    if action == "pick":
+        if value < 0 or value >= len(entries):
+            await message.answer("Out of range. Try again.", reply_markup=edit_entries_keyboard(entries, page=page))
+            return
+        entry = entries[value]
+        repo = get_repo(message)
+        deleted = await repo.delete_entry(entry_id=entry["id"], user_id=message.from_user.id)  # type: ignore[arg-type]
+        await state.clear()
+        if not deleted:
+            await message.answer("Could not delete entry.", reply_markup=main_keyboard())
+            return
+        await message.answer(f"Deleted: {format_entry_line(entry)}", reply_markup=main_keyboard())
 
 
 @router.message(F.text == STATS)

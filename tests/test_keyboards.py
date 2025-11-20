@@ -31,6 +31,18 @@ class EditKeyboardTests(unittest.TestCase):
         self.assertEqual(parse_edit_selection_text("3. 2024-01-03: 73.0 kg"), ("pick", 2))
         self.assertEqual(parse_edit_selection_text("Cancel"), ("cancel", 0))
 
+    def test_second_page_numbering_and_nav(self) -> None:
+        entries = [
+            {"recorded_at": f"2024-01-{i:02d}T00:00:00+00:00", "weight_kg": 70 + i, "fat_pct": None}
+            for i in range(1, 9)
+        ]
+        kb = edit_entries_keyboard(entries, page=1, page_size=3)
+        # first row on second page should start with 4 (global index)
+        self.assertTrue(kb.keyboard[0][0].text.startswith("4. 2024-01-04"))
+        nav_texts = [btn.text for btn in kb.keyboard[-1]]
+        self.assertIn(EDIT_PREV, nav_texts)
+        self.assertIn("Cancel", nav_texts)
+
 
 if __name__ == "__main__":
     unittest.main()
