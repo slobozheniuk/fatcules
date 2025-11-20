@@ -1,4 +1,8 @@
-from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
+from __future__ import annotations
+
+from datetime import date, timedelta
+
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
 
 
 ADD_ENTRY = "Add entry"
@@ -7,6 +11,7 @@ REMOVE_ENTRY = "Remove entry"
 STATS = "Stats"
 CANCEL = "Cancel"
 SKIP_FAT = "Skip fat %"
+DATEPICKER_PREFIX = "DP"
 
 
 def main_keyboard() -> ReplyKeyboardMarkup:
@@ -35,3 +40,90 @@ def fat_pct_keyboard() -> ReplyKeyboardMarkup:
         input_field_placeholder="Send fat % or skip",
     )
 
+
+def _start_of_month(day: date) -> date:
+    return day.replace(day=1)
+
+
+def _prev_month(day: date) -> date:
+    first = _start_of_month(day)
+    if first.month == 1:
+        return first.replace(year=first.year - 1, month=12, day=1)
+    return first.replace(month=first.month - 1, day=1)
+
+
+def _next_month(day: date) -> date:
+    first = _start_of_month(day)
+    if first.month == 12:
+        next_month_start = first.replace(year=first.year + 1, month=1, day=1)
+    else:
+        next_month_start = first.replace(month=first.month + 1, day=1)
+    return next_month_start
+
+
+def _callback(prefix: str, action: str, payload: str) -> str:
+    return f"{DATEPICKER_PREFIX}|{prefix}|{action}|{payload}"
+
+
+def datepicker_keyboard(prefix: str, month: date | None = None, default_date: date | None = None) -> InlineKeyboardMarkup:
+    today = date.today()
+    current_month = _start_of_month(month or today)
+    header = [InlineKeyboardButton(text=current_month.strftime("%B %Y"), callback_data=_callback(prefix, "noop", "header"))]
+
+    week_days = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]
+    weekday_row = [InlineKeyboardButton(text=day, callback_data=_callback(prefix, "noop", day.lower())) for day in week_days]
+
+    first_weekday = current_month.weekday()
+    days_in_month = (_next_month(current_month) - timedelta(days=1)).day
+    rows: list[list[InlineKeyboardButton]] = []
+    current_row: list[InlineKeyboardButton] = []
+
+    for _ in range(first_weekday):
+        current_row.append(InlineKeyboardButton(text=" ", callback_data=_callback(prefix, "noop", "pad")))
+
+    for day_num in range(1, days_in_month + 1):
+        day_date = current_month.replace(day=day_num)
+        current_row.append(
+            InlineKeyboardButton(
+                text=str(day_num),
+                callback_data=_callback(prefix, "pick", day_date.isoformat()),
+            )
+        )
+        if len(current_row) == 7:
+            rows.append(current_row)
+            current_row = []
+
+    if current_row:
+        while len(current_row) < 7:
+            current_row.append(InlineKeyboardButton(text=" ", callback_data=_callback(prefix, "noop", "pad")))
+        rows.append(current_row)
+
+    nav_row = [
+        InlineKeyboardButton(text="◀ Prev", callback_data=_callback(prefix, "nav", _prev_month(current_month).isoformat())),
+        InlineKeyboardButton(text="Today", callback_data=_callback(prefix, "pick", today.isoformat())),
+        InlineKeyboardButton(text="Next ▶", callback_data=_callback(prefix, "nav", _next_month(current_month).isoformat())),
+    ]
+
+    quick_row: list[InlineKeyboardButton] = []
+    if default_date:
+        quick_row.append(
+            InlineKeyboardButton(
+                text=f"Keep {default_date.isoformat()}",
+                callback_data=_callback(prefix, "pick", default_date.isoformat()),
+            )
+        )
+
+    keyboard = [header, weekday_row, *rows, nav_row]
+    if quick_row:
+        keyboard.append(quick_row)
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+
+def parse_datepicker_data(data: str) -> tuple[str, str, str] | None:
+    if not data or not data.startswith(f"{DATEPICKER_PREFIX}|"):
+        return None
+    parts = data.split("|", maxsplit=3)
+    if len(parts) != 4:
+        return None
+    _, prefix, action, payload = parts
+    return prefix, action, payload

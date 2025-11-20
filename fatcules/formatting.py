@@ -17,7 +17,7 @@ def now_utc() -> datetime:
 
 
 def format_entry_line(entry: dict, index: int | None = None) -> str:
-    recorded_at = datetime.fromisoformat(entry["recorded_at"]).astimezone().strftime("%Y-%m-%d")
+    recorded_at = datetime.fromisoformat(entry["recorded_at"]).date().isoformat()
     prefix = f"{index}. " if index is not None else ""
     fat_pct = entry["fat_pct"]
     fat_text = f", fat {fat_pct:.1f}%" if fat_pct is not None else ""

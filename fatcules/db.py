@@ -59,19 +59,20 @@ class EntryRepository:
         return cursor.lastrowid
 
     async def update_entry(
-        self, entry_id: int, user_id: int, weight_kg: float, fat_pct: Optional[float]
+        self, entry_id: int, user_id: int, recorded_at: datetime, weight_kg: float, fat_pct: Optional[float]
     ) -> bool:
         conn = await self.connect()
         fat_weight = weight_kg * fat_pct / 100 if fat_pct is not None else None
         cursor = await conn.execute(
             """
             UPDATE entries
-            SET weight_kg = :weight_kg, fat_pct = :fat_pct, fat_weight_kg = :fat_weight_kg
+            SET recorded_at = :recorded_at, weight_kg = :weight_kg, fat_pct = :fat_pct, fat_weight_kg = :fat_weight_kg
             WHERE id = :entry_id AND user_id = :user_id
             """,
             {
                 "entry_id": entry_id,
                 "user_id": user_id,
+                "recorded_at": recorded_at.isoformat(),
                 "weight_kg": weight_kg,
                 "fat_pct": fat_pct,
                 "fat_weight_kg": fat_weight,
@@ -132,4 +133,3 @@ class EntryRepository:
         )
         row = await cursor.fetchone()
         return row["fat_weight_kg"] if row else None
-
