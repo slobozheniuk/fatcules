@@ -29,3 +29,13 @@ Python Telegram bot for tracking weight and fat percentage using aiogram v3 and 
 - Commands/buttons: Add entry, Edit entry, Remove entry, Stats, and /start to reset.
 - Add/Edit flows show an inline date picker; today/entry date is preselected but any date can be chosen.
 - Edit/Delete selection uses a paginated custom keyboard (Prev/Next) instead of inline buttons.
+- Weight and fat inputs use a numpad-style custom keyboard; type digits then press Enter (fat input keeps a Skip button).
+
+## Docker
+Build and run the bot as a self-restarting container (mount `./data` for the SQLite DB and supply `BOT_TOKEN`):
+- Build: `docker build -t fatcules-bot .`
+- Run in background with restart: `docker run -d --name fatcules-bot --restart unless-stopped --env-file .env -v $(pwd)/data:/app/data fatcules-bot`
+- Stop/start: `docker stop fatcules-bot` / `docker start fatcules-bot`
+
+Place your .env in the project root (same folder as Dockerfile, main.py, etc.). When you run the container, point --env-file at that path (e.g., from the repo
+  root: docker run ... --env-file .env ...). If you keep .env elsewhere on the Pi, just pass its full path to --env-file.
