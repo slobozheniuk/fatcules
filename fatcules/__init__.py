@@ -1,0 +1,2 @@
+"""Fatcules Telegram bot package."""
+
