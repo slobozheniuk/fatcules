@@ -1,9 +1,10 @@
 import unittest
 
 from fatcules.keyboards import (
-    EDIT_PAGE_SIZE,
+    EDIT_NEXT,
+    EDIT_PREV,
     edit_entries_keyboard,
-    parse_edit_selection_data,
+    parse_edit_selection_text,
 )
 
 
@@ -15,18 +16,20 @@ class EditKeyboardTests(unittest.TestCase):
         ]
         kb = edit_entries_keyboard(entries, page=0, page_size=3)
         # first page contains first 3 entries and nav row
-        self.assertEqual(len(kb.inline_keyboard), 4)
-        self.assertIn("2024-01-01", kb.inline_keyboard[0][0].text)
-        self.assertIn("71.0", kb.inline_keyboard[0][0].text)
-        # nav row should include Next and page indicator
-        nav_texts = [btn.text for btn in kb.inline_keyboard[-1]]
+        self.assertEqual(len(kb.keyboard), 4)
+        self.assertTrue(kb.keyboard[0][0].text.startswith("1. 2024-01-01"))
+        self.assertIn("71.0", kb.keyboard[0][0].text)
+        # nav row should include Cancel and Next
+        nav_texts = [btn.text for btn in kb.keyboard[-1]]
+        self.assertIn("Cancel", nav_texts)
         self.assertIn("Next ▶", nav_texts)
-        self.assertIn("1/3", nav_texts)
 
     def test_parse_edit_selection(self) -> None:
-        self.assertEqual(parse_edit_selection_data("EDITSEL|pick|2"), ("pick", 2))
-        self.assertEqual(parse_edit_selection_data("EDITSEL|page|1"), ("page", 1))
-        self.assertIsNone(parse_edit_selection_data("OTHER|pick|1"))
+        self.assertEqual(parse_edit_selection_text("EDITSEL|pick|2"), None)
+        self.assertEqual(parse_edit_selection_text(EDIT_NEXT), ("nav", 1))
+        self.assertEqual(parse_edit_selection_text(EDIT_PREV), ("nav", -1))
+        self.assertEqual(parse_edit_selection_text("3. 2024-01-03: 73.0 kg"), ("pick", 2))
+        self.assertEqual(parse_edit_selection_text("Cancel"), ("cancel", 0))
 
 
 if __name__ == "__main__":

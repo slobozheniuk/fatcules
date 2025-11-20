@@ -13,8 +13,9 @@ CANCEL = "Cancel"
 SKIP_FAT = "Skip fat %"
 DATEPICKER_PREFIX = "DP"
 DUPLICATE_PREFIX = "DUP"
-EDIT_SELECT_PREFIX = "EDITSEL"
 EDIT_PAGE_SIZE = 5
+EDIT_PREV = "◀ Prev"
+EDIT_NEXT = "Next ▶"
 
 
 def main_keyboard() -> ReplyKeyboardMarkup:
@@ -178,50 +179,41 @@ def _entry_label(entry: dict) -> str:
     return f"{base}, fat {float(fat):.1f}%"
 
 
-def edit_entries_keyboard(entries: list[dict], page: int = 0, page_size: int = EDIT_PAGE_SIZE) -> InlineKeyboardMarkup:
+def edit_entries_keyboard(
+    entries: list[dict], page: int = 0, page_size: int = EDIT_PAGE_SIZE
+) -> ReplyKeyboardMarkup:
     total = len(entries)
     total_pages = max(1, (total + page_size - 1) // page_size)
     page = max(0, min(page, total_pages - 1))
     start = page * page_size
     end = min(start + page_size, total)
-    rows: list[list[InlineKeyboardButton]] = []
+    rows: list[list[KeyboardButton]] = []
     for idx, entry in enumerate(entries[start:end], start=start):
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=_entry_label(entry),
-                    callback_data=f"{EDIT_SELECT_PREFIX}|pick|{idx}",
-                )
-            ]
-        )
-    nav_buttons: list[InlineKeyboardButton] = [
-        InlineKeyboardButton(text="Cancel", callback_data=f"{EDIT_SELECT_PREFIX}|cancel|0")
-    ]
-    if total_pages > 1:
-        if page > 0:
-            nav_buttons.insert(
-                0, InlineKeyboardButton(text="◀ Prev", callback_data=f"{EDIT_SELECT_PREFIX}|page|{page-1}")
-            )
-        if page < total_pages - 1:
-            nav_buttons.append(
-                InlineKeyboardButton(text="Next ▶", callback_data=f"{EDIT_SELECT_PREFIX}|page|{page+1}")
-            )
-        nav_buttons.append(
-            InlineKeyboardButton(text=f"{page+1}/{total_pages}", callback_data=f"{EDIT_SELECT_PREFIX}|noop|0")
-        )
-    rows.append(nav_buttons)
-    return InlineKeyboardMarkup(inline_keyboard=rows)
+        rows.append([KeyboardButton(text=f"{idx + 1}. {_entry_label(entry)}")])
+    nav_row: list[KeyboardButton] = []
+    if page > 0:
+        nav_row.append(KeyboardButton(text=EDIT_PREV))
+    nav_row.append(KeyboardButton(text=CANCEL))
+    if page < total_pages - 1:
+        nav_row.append(KeyboardButton(text=EDIT_NEXT))
+    rows.append(nav_row)
+    return ReplyKeyboardMarkup(
+        keyboard=rows,
+        resize_keyboard=True,
+        input_field_placeholder=f"Page {page + 1}/{total_pages}: tap an entry",
+    )
 
 
-def parse_edit_selection_data(data: str) -> tuple[str, int] | None:
-    if not data or not data.startswith(f"{EDIT_SELECT_PREFIX}|"):
-        return None
-    parts = data.split("|", maxsplit=2)
-    if len(parts) != 3:
-        return None
-    action, payload = parts[1], parts[2]
+def parse_edit_selection_text(text: str) -> tuple[str, int] | None:
+    if text == EDIT_NEXT:
+        return ("nav", 1)
+    if text == EDIT_PREV:
+        return ("nav", -1)
+    if text == CANCEL:
+        return ("cancel", 0)
+    parts = text.split(".", maxsplit=1)
     try:
-        value = int(payload)
-    except ValueError:
-        value = 0
-    return action, value
+        idx = int(parts[0]) - 1
+    except (ValueError, IndexError):
+        return None
+    return ("pick", idx)
