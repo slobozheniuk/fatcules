@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import aiosqlite
-from datetime import datetime
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -80,6 +80,25 @@ class EntryRepository:
         )
         await conn.commit()
         return cursor.rowcount > 0
+
+    async def get_entry_by_date(self, user_id: int, recorded_date: date) -> Optional[dict[str, Any]]:
+        conn = await self.connect()
+        start = datetime.combine(recorded_date, datetime.min.time(), tzinfo=timezone.utc)
+        end = start + timedelta(days=1)
+        cursor = await conn.execute(
+            """
+            SELECT id, user_id, recorded_at, weight_kg, fat_pct, fat_weight_kg
+            FROM entries
+            WHERE user_id = :user_id
+              AND recorded_at >= :start
+              AND recorded_at < :end
+            ORDER BY recorded_at DESC
+            LIMIT 1
+            """,
+            {"user_id": user_id, "start": start.isoformat(), "end": end.isoformat()},
+        )
+        row = await cursor.fetchone()
+        return dict(row) if row else None
 
     async def delete_entry(self, entry_id: int, user_id: int) -> bool:
         conn = await self.connect()

@@ -13,6 +13,7 @@ from .keyboards import (
     ADD_ENTRY,
     CANCEL,
     DATEPICKER_PREFIX,
+    DUPLICATE_PREFIX,
     EDIT_ENTRY,
     REMOVE_ENTRY,
     SKIP_FAT,
@@ -21,7 +22,9 @@ from .keyboards import (
     fat_pct_keyboard,
     main_keyboard,
     datepicker_keyboard,
+    duplicate_date_keyboard,
     parse_datepicker_data,
+    parse_duplicate_decision,
 )
 from .states import AddEntryState, EditEntryState, RemoveEntryState
 from .stats import average_daily_drop, build_plot, parse_series
@@ -226,6 +229,13 @@ def _combine_date(selected: date) -> datetime:
     return datetime.combine(selected, datetime.min.time(), tzinfo=timezone.utc)
 
 
+def _selected_date_from_state(data: dict) -> date:
+    stored = data.get("selected_date")
+    if not stored:
+        raise ValueError("selected_date not set in state")
+    return date.fromisoformat(stored)
+
+
 @router.callback_query(F.data.startswith(f"{DATEPICKER_PREFIX}|add|"))
 async def add_entry_datepicker(callback: CallbackQuery, state: FSMContext) -> None:
     parsed = parse_datepicker_data(callback.data or "")
@@ -256,6 +266,20 @@ async def add_entry_datepicker(callback: CallbackQuery, state: FSMContext) -> No
         await callback.answer("Something went wrong. Please start again.", show_alert=True)
         return
     repo = get_repo(callback.message)
+    existing = await repo.get_entry_by_date(callback.from_user.id, selected_date)  # type: ignore[arg-type]
+    if existing:
+        await state.update_data(
+            selected_date=selected_date.isoformat(),
+            conflict_entry_id=existing["id"],
+        )
+        await state.set_state(AddEntryState.confirm_existing)
+        await callback.message.answer(
+            f"An entry already exists for {selected_date.isoformat()}:\n{format_entry_line(existing)}\n"
+            "Replace it, pick another date, or keep the old data?",
+            reply_markup=duplicate_date_keyboard(prefix="add"),
+        )
+        await callback.answer()
+        return
     fat_pct = data.get("fat_pct")
     recorded_at = _combine_date(selected_date)
     await repo.add_entry(
@@ -311,6 +335,20 @@ async def edit_entry_datepicker(callback: CallbackQuery, state: FSMContext) -> N
         await state.clear()
         await callback.answer("Missing weight. Please restart edit.", show_alert=True)
         return
+    conflict = await repo.get_entry_by_date(callback.from_user.id, selected_date)  # type: ignore[arg-type]
+    if conflict and conflict["id"] != data["entry_id"]:
+        await state.update_data(
+            selected_date=selected_date.isoformat(),
+            conflict_entry_id=conflict["id"],
+        )
+        await state.set_state(EditEntryState.confirm_existing)
+        await callback.message.answer(
+            f"Another entry exists for {selected_date.isoformat()}:\n{format_entry_line(conflict)}\n"
+            "Replace it, pick a different date, or keep the old data?",
+            reply_markup=duplicate_date_keyboard(prefix="edit"),
+        )
+        await callback.answer()
+        return
     recorded_at = _combine_date(selected_date)
     updated = await repo.update_entry(
         entry_id=int(data["entry_id"]),
@@ -330,3 +368,130 @@ async def edit_entry_datepicker(callback: CallbackQuery, state: FSMContext) -> N
         reply_markup=main_keyboard(),
     )
     await callback.answer("Updated")
+
+
+@router.callback_query(F.data.startswith(f"{DUPLICATE_PREFIX}|add|"))
+async def add_entry_duplicate_decision(callback: CallbackQuery, state: FSMContext) -> None:
+    parsed = parse_duplicate_decision(callback.data or "")
+    if not parsed:
+        await callback.answer()
+        return
+    prefix, action = parsed
+    if prefix != "add":
+        await callback.answer()
+        return
+    if await state.get_state() != AddEntryState.confirm_existing.state:
+        await callback.answer()
+        return
+    data = await state.get_data()
+    weight = data.get("weight_kg")
+    fat_pct = data.get("fat_pct")
+    conflict_entry_id = data.get("conflict_entry_id")
+    if weight is None or conflict_entry_id is None or callback.message is None:
+        await state.clear()
+        await callback.answer("Something went wrong. Please start again.", show_alert=True)
+        return
+    if action == "different":
+        selected_date = _selected_date_from_state(data)
+        await state.set_state(AddEntryState.date)
+        await callback.message.answer(
+            "Pick a different date.",
+            reply_markup=datepicker_keyboard(prefix="add", month=selected_date),
+        )
+        await callback.answer()
+        return
+    if action == "keep":
+        await state.clear()
+        await callback.message.answer(
+            "Kept the existing entry. Nothing was saved.",
+            reply_markup=main_keyboard(),
+        )
+        await callback.answer()
+        return
+    if action == "replace":
+        repo = get_repo(callback.message)
+        selected_date = _selected_date_from_state(data)
+        recorded_at = _combine_date(selected_date)
+        updated = await repo.update_entry(
+            entry_id=int(conflict_entry_id),
+            user_id=callback.from_user.id,  # type: ignore[arg-type]
+            recorded_at=recorded_at,
+            weight_kg=float(weight),
+            fat_pct=fat_pct if fat_pct is not None else None,
+        )
+        await state.clear()
+        if not updated:
+            await callback.message.answer("Could not replace existing entry.", reply_markup=main_keyboard())
+            await callback.answer()
+            return
+        fat_info = "" if fat_pct is None else f" and fat {fat_pct:.1f}%"
+        await callback.message.answer(
+            f"Entry replaced for {recorded_at.date()}: {float(weight):.1f} kg{fat_info}",
+            reply_markup=main_keyboard(),
+        )
+        await callback.answer("Replaced")
+
+
+@router.callback_query(F.data.startswith(f"{DUPLICATE_PREFIX}|edit|"))
+async def edit_entry_duplicate_decision(callback: CallbackQuery, state: FSMContext) -> None:
+    parsed = parse_duplicate_decision(callback.data or "")
+    if not parsed:
+        await callback.answer()
+        return
+    prefix, action = parsed
+    if prefix != "edit":
+        await callback.answer()
+        return
+    if await state.get_state() != EditEntryState.confirm_existing.state:
+        await callback.answer()
+        return
+    data = await state.get_data()
+    entry_id = data.get("entry_id")
+    conflict_entry_id = data.get("conflict_entry_id")
+    weight = data.get("weight_kg")
+    fat_pct = data.get("fat_pct")
+    if callback.message is None or entry_id is None or weight is None or conflict_entry_id is None:
+        await state.clear()
+        await callback.answer("Something went wrong. Please start again.", show_alert=True)
+        return
+    selected_date = _selected_date_from_state(data)
+    if action == "different":
+        await state.set_state(EditEntryState.date)
+        await callback.message.answer(
+            "Pick a different date.",
+            reply_markup=datepicker_keyboard(prefix="edit", month=selected_date, default_date=selected_date),
+        )
+        await callback.answer()
+        return
+    if action == "keep":
+        await state.clear()
+        await callback.message.answer(
+            "Kept the existing entry. No changes applied.",
+            reply_markup=main_keyboard(),
+        )
+        await callback.answer()
+        return
+    if action == "replace":
+        repo = get_repo(callback.message)
+        recorded_at = _combine_date(selected_date)
+        updated = await repo.update_entry(
+            entry_id=int(entry_id),
+            user_id=callback.from_user.id,  # type: ignore[arg-type]
+            recorded_at=recorded_at,
+            weight_kg=float(weight),
+            fat_pct=fat_pct if fat_pct is not None else None,
+        )
+        if not updated:
+            await state.clear()
+            await callback.message.answer("Could not update entry.", reply_markup=main_keyboard())
+            await callback.answer()
+            return
+        if int(conflict_entry_id) != int(entry_id):
+            await repo.delete_entry(entry_id=int(conflict_entry_id), user_id=callback.from_user.id)  # type: ignore[arg-type]
+        await state.clear()
+        fat_info = "" if fat_pct is None else f" and fat {fat_pct:.1f}%"
+        await callback.message.answer(
+            f"Entry updated for {recorded_at.date()}: {float(weight):.1f} kg{fat_info}. Replaced existing data.",
+            reply_markup=main_keyboard(),
+        )
+        await callback.answer("Replaced")

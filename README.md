@@ -14,6 +14,7 @@ Python Telegram bot for tracking weight and fat percentage using aiogram v3 and 
   - Edit an entry (numbered list to select which entry to edit).
   - Remove an entry (numbered list to select which entry to delete).
   - Get statistics.
+- If a date already has an entry, users choose to replace existing data, pick a different date, or keep the current entry.
 - Statistics return a picture showing:
   - Fat weight (`total weight * fat percentage`).
   - Average drop in fat weight over the last 7, 14, and 30 days.

@@ -5,6 +5,7 @@ class AddEntryState(StatesGroup):
     weight = State()
     fat_pct = State()
     date = State()
+    confirm_existing = State()
 
 
 class EditEntryState(StatesGroup):
@@ -12,6 +13,7 @@ class EditEntryState(StatesGroup):
     weight = State()
     fat_pct = State()
     date = State()
+    confirm_existing = State()
 
 
 class RemoveEntryState(StatesGroup):

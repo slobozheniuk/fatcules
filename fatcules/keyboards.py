@@ -12,6 +12,7 @@ STATS = "Stats"
 CANCEL = "Cancel"
 SKIP_FAT = "Skip fat %"
 DATEPICKER_PREFIX = "DP"
+DUPLICATE_PREFIX = "DUP"
 
 
 def main_keyboard() -> ReplyKeyboardMarkup:
@@ -127,3 +128,38 @@ def parse_datepicker_data(data: str) -> tuple[str, str, str] | None:
         return None
     _, prefix, action, payload = parts
     return prefix, action, payload
+
+
+def duplicate_date_keyboard(prefix: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="Replace existing",
+                    callback_data=f"{DUPLICATE_PREFIX}|{prefix}|replace",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="Choose different date",
+                    callback_data=f"{DUPLICATE_PREFIX}|{prefix}|different",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="Keep old data",
+                    callback_data=f"{DUPLICATE_PREFIX}|{prefix}|keep",
+                )
+            ],
+        ]
+    )
+
+
+def parse_duplicate_decision(data: str) -> tuple[str, str] | None:
+    if not data or not data.startswith(f"{DUPLICATE_PREFIX}|"):
+        return None
+    parts = data.split("|", maxsplit=2)
+    if len(parts) != 3:
+        return None
+    _, prefix, action = parts
+    return prefix, action
