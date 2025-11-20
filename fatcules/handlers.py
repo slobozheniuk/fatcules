@@ -25,11 +25,9 @@ from .keyboards import (
     datepicker_keyboard,
     duplicate_date_keyboard,
     edit_entries_keyboard,
-    fat_numpad_keyboard,
     parse_datepicker_data,
     parse_duplicate_decision,
     parse_edit_selection_text,
-    weight_numpad_keyboard,
 )
 from .states import AddEntryState, EditEntryState, RemoveEntryState
 from .stats import average_daily_drop, build_plot, parse_series
@@ -63,20 +61,20 @@ async def cancel_any(message: Message, state: FSMContext) -> None:
 @router.message(F.text == ADD_ENTRY)
 async def add_entry_start(message: Message, state: FSMContext) -> None:
     await state.set_state(AddEntryState.weight)
-    await message.answer("Send weight in kg (e.g., 82.3).", reply_markup=weight_numpad_keyboard())
+    await message.answer("Send weight in kg (e.g., 82.3).", reply_markup=cancel_keyboard())
 
 
 @router.message(AddEntryState.weight)
 async def add_entry_weight(message: Message, state: FSMContext) -> None:
     weight = parse_float(message.text or "")
     if weight is None or weight <= 0:
-        await message.answer("Please send a valid weight number.", reply_markup=weight_numpad_keyboard())
+        await message.answer("Please send a valid weight number.", reply_markup=cancel_keyboard())
         return
     await state.update_data(weight_kg=weight)
     await state.set_state(AddEntryState.fat_pct)
     await message.answer(
         "Send fat % (e.g., 18.5) or tap skip.",
-        reply_markup=fat_numpad_keyboard(),
+        reply_markup=fat_pct_keyboard(),
     )
 
 
@@ -88,7 +86,7 @@ async def add_entry_fat(message: Message, state: FSMContext) -> None:
     else:
         parsed = parse_float(message.text or "")
         if parsed is None or parsed <= 0:
-            await message.answer("Please send a valid fat % or skip.", reply_markup=fat_numpad_keyboard())
+            await message.answer("Please send a valid fat % or skip.", reply_markup=fat_pct_keyboard())
             return
         fat_pct = parsed
     await state.update_data(fat_pct=fat_pct)
@@ -159,13 +157,13 @@ async def edit_entry_choose(message: Message, state: FSMContext) -> None:
 async def edit_entry_weight(message: Message, state: FSMContext) -> None:
     weight = parse_float(message.text or "")
     if weight is None or weight <= 0:
-        await message.answer("Please send a valid weight number.", reply_markup=weight_numpad_keyboard())
+        await message.answer("Please send a valid weight number.", reply_markup=cancel_keyboard())
         return
     await state.update_data(weight_kg=weight)
     await state.set_state(EditEntryState.fat_pct)
     await message.answer(
         "Send fat % (e.g., 18.5) or tap skip.",
-        reply_markup=fat_numpad_keyboard(),
+        reply_markup=fat_pct_keyboard(),
     )
 
 
@@ -178,7 +176,7 @@ async def edit_entry_fat(message: Message, state: FSMContext) -> None:
     else:
         parsed = parse_float(message.text or "")
         if parsed is None or parsed <= 0:
-            await message.answer("Please send a valid fat % or skip.", reply_markup=fat_numpad_keyboard())
+            await message.answer("Please send a valid fat % or skip.", reply_markup=fat_pct_keyboard())
             return
         fat_pct = parsed
     await state.update_data(fat_pct=fat_pct)

@@ -28,6 +28,4 @@ Python Telegram bot for tracking weight and fat percentage using aiogram v3 and 
 - `.env` is auto-loaded at startup if present.
 - Commands/buttons: Add entry, Edit entry, Remove entry, Stats, and /start to reset.
 - Add/Edit flows show an inline date picker; today/entry date is preselected but any date can be chosen.
-- Date picker highlights the Today button with an emoji/bold label for visibility.
 - Edit/Delete selection uses a paginated custom keyboard (Prev/Next) instead of inline buttons.
-- Weight and fat inputs use a numpad-style custom keyboard (fat input keeps a Skip button).

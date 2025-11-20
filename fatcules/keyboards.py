@@ -45,31 +45,6 @@ def fat_pct_keyboard() -> ReplyKeyboardMarkup:
     )
 
 
-def weight_numpad_keyboard() -> ReplyKeyboardMarkup:
-    rows = [
-        [KeyboardButton(text="1"), KeyboardButton(text="2"), KeyboardButton(text="3")],
-        [KeyboardButton(text="4"), KeyboardButton(text="5"), KeyboardButton(text="6")],
-        [KeyboardButton(text="7"), KeyboardButton(text="8"), KeyboardButton(text="9")],
-        [KeyboardButton(text="."), KeyboardButton(text="0"), KeyboardButton(text=CANCEL)],
-    ]
-    return ReplyKeyboardMarkup(
-        keyboard=rows, resize_keyboard=True, input_field_placeholder="Tap numbers or cancel"
-    )
-
-
-def fat_numpad_keyboard() -> ReplyKeyboardMarkup:
-    rows = [
-        [KeyboardButton(text="1"), KeyboardButton(text="2"), KeyboardButton(text="3")],
-        [KeyboardButton(text="4"), KeyboardButton(text="5"), KeyboardButton(text="6")],
-        [KeyboardButton(text="7"), KeyboardButton(text="8"), KeyboardButton(text="9")],
-        [KeyboardButton(text="."), KeyboardButton(text="0"), KeyboardButton(text=CANCEL)],
-        [KeyboardButton(text=SKIP_FAT)],
-    ]
-    return ReplyKeyboardMarkup(
-        keyboard=rows, resize_keyboard=True, input_field_placeholder="Tap numbers, skip, or cancel"
-    )
-
-
 def _start_of_month(day: date) -> date:
     return day.replace(day=1)
 
@@ -129,7 +104,7 @@ def datepicker_keyboard(prefix: str, month: date | None = None, default_date: da
 
     nav_row = [
         InlineKeyboardButton(text="◀ Prev", callback_data=_callback(prefix, "nav", _prev_month(current_month).isoformat())),
-        InlineKeyboardButton(text="⭐️ 𝗧𝗼𝗱𝗮𝘆", callback_data=_callback(prefix, "pick", today.isoformat())),
+        InlineKeyboardButton(text="Today", callback_data=_callback(prefix, "pick", today.isoformat())),
         InlineKeyboardButton(text="Next ▶", callback_data=_callback(prefix, "nav", _next_month(current_month).isoformat())),
     ]
 
