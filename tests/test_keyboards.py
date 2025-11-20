@@ -5,6 +5,9 @@ from fatcules.keyboards import (
     EDIT_PREV,
     edit_entries_keyboard,
     parse_edit_selection_text,
+    weight_numpad_keyboard,
+    fat_numpad_keyboard,
+    datepicker_keyboard,
 )
 
 
@@ -42,6 +45,23 @@ class EditKeyboardTests(unittest.TestCase):
         nav_texts = [btn.text for btn in kb.keyboard[-1]]
         self.assertIn(EDIT_PREV, nav_texts)
         self.assertIn("Cancel", nav_texts)
+
+    def test_weight_and_fat_numpad(self) -> None:
+        weight_kb = weight_numpad_keyboard()
+        fat_kb = fat_numpad_keyboard()
+        weight_texts = [btn.text for row in weight_kb.keyboard for btn in row]
+        fat_texts = [btn.text for row in fat_kb.keyboard for btn in row]
+        self.assertIn("0", weight_texts)
+        self.assertIn("9", weight_texts)
+        self.assertIn(".", weight_texts)
+        self.assertIn("Cancel", weight_texts)
+        self.assertIn("Skip fat %", fat_texts)
+
+    def test_datepicker_today_formatting(self) -> None:
+        kb = datepicker_keyboard(prefix="test")
+        today_btn = kb.inline_keyboard[-1][1]
+        self.assertIn("⭐️", today_btn.text)
+        self.assertIn("𝗧𝗼𝗱𝗮𝘆", today_btn.text)
 
 
 if __name__ == "__main__":
