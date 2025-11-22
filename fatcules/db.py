@@ -20,6 +20,15 @@ class EntryRepository:
             await self._conn.execute("PRAGMA journal_mode=WAL;")
             await self._conn.execute(
                 """
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY,
+                    height_cm REAL,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+            await self._conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS entries (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id INTEGER NOT NULL,
@@ -36,6 +45,37 @@ class EntryRepository:
             )
             await self._conn.commit()
         return self._conn
+
+    async def get_user(self, user_id: int) -> Optional[dict[str, Any]]:
+        conn = await self.connect()
+        cursor = await conn.execute(
+            "SELECT id, height_cm, created_at FROM users WHERE id = :user_id", {"user_id": user_id}
+        )
+        row = await cursor.fetchone()
+        return dict(row) if row else None
+
+    async def ensure_user(self, user_id: int) -> dict[str, Any]:
+        conn = await self.connect()
+        await conn.execute(
+            "INSERT INTO users (id) VALUES (:user_id) ON CONFLICT(id) DO NOTHING",
+            {"user_id": user_id},
+        )
+        await conn.commit()
+        user = await self.get_user(user_id)
+        if user is None:
+            raise RuntimeError("Failed to ensure user row")
+        return user
+
+    async def set_user_height(self, user_id: int, height_cm: float) -> None:
+        conn = await self.connect()
+        await conn.execute(
+            """
+            INSERT INTO users (id, height_cm) VALUES (:user_id, :height_cm)
+            ON CONFLICT(id) DO UPDATE SET height_cm = excluded.height_cm
+            """,
+            {"user_id": user_id, "height_cm": height_cm},
+        )
+        await conn.commit()
 
     async def add_entry(
         self, user_id: int, recorded_at: datetime, weight_kg: float, fat_pct: Optional[float]
@@ -152,3 +192,18 @@ class EntryRepository:
         )
         row = await cursor.fetchone()
         return row["fat_weight_kg"] if row else None
+
+    async def get_latest_weight(self, user_id: int) -> Optional[float]:
+        conn = await self.connect()
+        cursor = await conn.execute(
+            """
+            SELECT weight_kg
+            FROM entries
+            WHERE user_id = :user_id
+            ORDER BY recorded_at DESC
+            LIMIT 1
+            """,
+            {"user_id": user_id},
+        )
+        row = await cursor.fetchone()
+        return row["weight_kg"] if row else None

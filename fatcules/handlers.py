@@ -8,7 +8,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import BufferedInputFile, CallbackQuery, Message, ReplyKeyboardMarkup
 
 from .db import EntryRepository
-from .formatting import format_entry_line, format_stats_summary, parse_float
+from .formatting import format_entry_line, format_stats_summary, parse_float, parse_height_cm
 from .keyboards import (
     ADD_ENTRY,
     CANCEL,
@@ -29,7 +29,7 @@ from .keyboards import (
     parse_duplicate_decision,
     parse_edit_selection_text,
 )
-from .states import AddEntryState, EditEntryState, RemoveEntryState
+from .states import AddEntryState, EditEntryState, RemoveEntryState, SetHeightState
 from .stats import average_daily_drop, build_plot, parse_series
 
 router = Router()
@@ -42,13 +42,57 @@ def get_repo(message: Message) -> EntryRepository:
     return repo
 
 
+async def _save_height(user_id: int, height: float, message: Message, state: FSMContext) -> None:
+    repo = get_repo(message)
+    await repo.set_user_height(user_id=user_id, height_cm=height)
+    await state.clear()
+    await message.answer(f"Saved height: {height:.1f} cm.", reply_markup=main_keyboard())
+
+
 @router.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext) -> None:
     await state.clear()
+    repo = get_repo(message)
+    user = await repo.ensure_user(message.from_user.id)  # type: ignore[arg-type]
     await message.answer(
         "Hi! I track your weight and fat %. Use the buttons below.",
         reply_markup=main_keyboard(),
     )
+    if user.get("height_cm") is None:
+        await state.set_state(SetHeightState.entering)
+        await message.answer(
+            "Before we start, please send your height in cm (50-250). You can also use /set_height later.",
+            reply_markup=cancel_keyboard(),
+        )
+
+
+@router.message(Command("set_height"))
+async def set_height_command(message: Message, state: FSMContext) -> None:
+    await state.clear()
+    parts = (message.text or "").split(maxsplit=1)
+    provided = parts[1] if len(parts) > 1 else ""
+    if provided:
+        height = parse_height_cm(provided)
+        if height is None:
+            await state.set_state(SetHeightState.entering)
+            await message.answer("Height must be between 50 and 250 cm. Send your height in cm.", reply_markup=cancel_keyboard())
+            return
+        await _save_height(message.from_user.id, height, message, state)  # type: ignore[arg-type]
+        return
+    await state.set_state(SetHeightState.entering)
+    await message.answer("Send your height in cm (50-250).", reply_markup=cancel_keyboard())
+
+
+@router.message(SetHeightState.entering)
+async def set_height_value(message: Message, state: FSMContext) -> None:
+    height = parse_height_cm(message.text or "")
+    if height is None:
+        await message.answer(
+            "Please send a valid height in cm between 50 and 250.",
+            reply_markup=cancel_keyboard(),
+        )
+        return
+    await _save_height(message.from_user.id, height, message, state)  # type: ignore[arg-type]
 
 
 @router.message(Command("cancel"))
@@ -255,7 +299,15 @@ async def stats(message: Message, state: FSMContext) -> None:
     series = parse_series(raw_series)
     drops = {days: average_daily_drop(series, days) for days in (7, 14, 30)}
     latest = await repo.get_latest_fat_weight(user_id=message.from_user.id)  # type: ignore[arg-type]
-    summary_text = format_stats_summary(latest, drops)
+    user = await repo.ensure_user(message.from_user.id)  # type: ignore[arg-type]
+    latest_weight = await repo.get_latest_weight(user_id=message.from_user.id)  # type: ignore[arg-type]
+    latest_bmi = None
+    height_cm = user.get("height_cm")
+    if height_cm and latest_weight:
+        height_m = float(height_cm) / 100
+        if height_m > 0:
+            latest_bmi = float(latest_weight) / (height_m * height_m)
+    summary_text = format_stats_summary(latest, drops, latest_bmi)
     plot_image = build_plot(series, summary_text)
     photo = BufferedInputFile(plot_image.getvalue(), filename="fat-weight.png")
     await message.answer_photo(

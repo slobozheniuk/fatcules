@@ -19,3 +19,7 @@ class EditEntryState(StatesGroup):
 class RemoveEntryState(StatesGroup):
     choosing_entry = State()
     remove_page = State()
+
+
+class SetHeightState(StatesGroup):
+    entering = State()

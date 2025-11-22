@@ -2,7 +2,7 @@ import math
 from datetime import datetime, timedelta, timezone
 import unittest
 
-from fatcules.formatting import parse_float, format_stats_summary
+from fatcules.formatting import format_stats_summary, parse_float, parse_height_cm
 from fatcules.stats import average_daily_drop, parse_series
 
 
@@ -11,6 +11,14 @@ class TestParsing(unittest.TestCase):
         self.assertEqual(parse_float(" 82.5 "), 82.5)
         self.assertEqual(parse_float("82,5"), 82.5)
         self.assertIsNone(parse_float("abc"))
+
+    def test_parse_height_cm(self) -> None:
+        self.assertEqual(parse_height_cm("180"), 180)
+        self.assertEqual(parse_height_cm("170.5"), 170.5)
+        self.assertEqual(parse_height_cm("249,99"), 249.99)
+        self.assertIsNone(parse_height_cm("40"))
+        self.assertIsNone(parse_height_cm("999"))
+        self.assertIsNone(parse_height_cm("bad"))
 
 
 class TestStats(unittest.TestCase):
@@ -40,12 +48,12 @@ class TestStats(unittest.TestCase):
 
 class TestFormatting(unittest.TestCase):
     def test_format_stats_summary(self) -> None:
-        summary = format_stats_summary(9.9, {7: -0.2, 14: None, 30: -0.1})
+        summary = format_stats_summary(9.9, {7: -0.2, 14: None, 30: -0.1}, 24.6)
         self.assertIn("Current fat weight: 9.90 kg", summary)
         self.assertIn("7d: -0.200 kg/day", summary)
         self.assertIn("14d: not enough data", summary)
+        self.assertIn("Latest BMI: 24.6", summary)
 
 
 if __name__ == "__main__":
     unittest.main()
-
