@@ -23,3 +23,8 @@ class RemoveEntryState(StatesGroup):
 
 class SetHeightState(StatesGroup):
     entering = State()
+
+
+class GoalState(StatesGroup):
+    weight = State()
+    fat_pct = State()

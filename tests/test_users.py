@@ -53,6 +53,14 @@ class UserRepositoryTests(unittest.IsolatedAsyncioTestCase):
         series = await self.repo.get_fat_weight_series(42)
         self.assertTrue(all("weight_kg" in item for item in series))
 
+    async def test_set_user_goal(self) -> None:
+        await self.repo.set_user_goal(7, 75.0, 18.0)
+        user = await self.repo.get_user(7)
+        self.assertIsNotNone(user)
+        assert user is not None
+        self.assertAlmostEqual(user["goal_weight_kg"], 75.0)
+        self.assertAlmostEqual(user["goal_fat_pct"], 18.0)
+
 
 if __name__ == "__main__":
     unittest.main()

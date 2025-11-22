@@ -11,11 +11,13 @@ from .db import EntryRepository
 from .formatting import format_entry_line, format_stats_summary, parse_float, parse_height_cm
 from .keyboards import (
     ADD_ENTRY,
+    ADD_GOAL,
     CANCEL,
     DATEPICKER_PREFIX,
     DUPLICATE_PREFIX,
     EDIT_PAGE_SIZE,
     EDIT_ENTRY,
+    EDIT_GOAL,
     REMOVE_ENTRY,
     SKIP_FAT,
     STATS,
@@ -29,10 +31,14 @@ from .keyboards import (
     parse_duplicate_decision,
     parse_edit_selection_text,
 )
-from .states import AddEntryState, EditEntryState, RemoveEntryState, SetHeightState
+from .states import AddEntryState, EditEntryState, GoalState, RemoveEntryState, SetHeightState
 from .stats import build_dashboard, compute_fat_loss_rate, parse_series
 
 router = Router()
+
+
+def _goal_set(user: dict) -> bool:
+    return user.get("goal_weight_kg") is not None and user.get("goal_fat_pct") is not None
 
 
 def get_repo(message: Message) -> EntryRepository:
@@ -46,7 +52,23 @@ async def _save_height(user_id: int, height: float, message: Message, state: FSM
     repo = get_repo(message)
     await repo.set_user_height(user_id=user_id, height_cm=height)
     await state.clear()
-    await message.answer(f"Saved height: {height:.1f} cm.", reply_markup=main_keyboard())
+    await message.answer(
+        f"Saved height: {height:.1f} cm.",
+        reply_markup=await main_keyboard_for(message),
+    )
+
+
+async def main_keyboard_for(message: Message | CallbackQuery) -> ReplyKeyboardMarkup:
+    msg = message if isinstance(message, Message) else message.message
+    if msg is None:
+        return main_keyboard()
+    try:
+        repo = get_repo(msg)
+        user = await repo.ensure_user(msg.from_user.id)  # type: ignore[arg-type]
+        goal_set = _goal_set(user)
+    except Exception:
+        goal_set = False
+    return main_keyboard(goal_set=goal_set)
 
 
 @router.message(CommandStart())
@@ -56,7 +78,7 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
     user = await repo.ensure_user(message.from_user.id)  # type: ignore[arg-type]
     await message.answer(
         "Hi! I track your weight and fat %. Use the buttons below.",
-        reply_markup=main_keyboard(),
+        reply_markup=await main_keyboard_for(message),
     )
     if user.get("height_cm") is None:
         await state.set_state(SetHeightState.entering)
@@ -95,11 +117,50 @@ async def set_height_value(message: Message, state: FSMContext) -> None:
     await _save_height(message.from_user.id, height, message, state)  # type: ignore[arg-type]
 
 
+@router.message(F.text.in_({ADD_GOAL, EDIT_GOAL}))
+async def goal_start(message: Message, state: FSMContext) -> None:
+    await state.set_state(GoalState.weight)
+    await message.answer("Send goal weight in kg (e.g., 75).", reply_markup=cancel_keyboard())
+
+
+@router.message(GoalState.weight)
+async def goal_weight(message: Message, state: FSMContext) -> None:
+    weight = parse_float(message.text or "")
+    if weight is None or weight <= 0:
+        await message.answer("Please send a valid goal weight.", reply_markup=cancel_keyboard())
+        return
+    await state.update_data(goal_weight=weight)
+    await state.set_state(GoalState.fat_pct)
+    await message.answer("Send goal fat % (e.g., 18.5).", reply_markup=cancel_keyboard())
+
+
+@router.message(GoalState.fat_pct)
+async def goal_fat(message: Message, state: FSMContext) -> None:
+    fat_pct = parse_float(message.text or "")
+    if fat_pct is None or fat_pct <= 0 or fat_pct > 100:
+        await message.answer("Please send a valid fat % (0-100).", reply_markup=cancel_keyboard())
+        return
+    data = await state.get_data()
+    weight = data.get("goal_weight")
+    if weight is None:
+        await state.clear()
+        await message.answer("Missing goal weight. Please start again.", reply_markup=await main_keyboard_for(message))
+        return
+    repo = get_repo(message)
+    await repo.set_user_goal(user_id=message.from_user.id, weight_kg=float(weight), fat_pct=float(fat_pct))  # type: ignore[arg-type]
+    await state.clear()
+    goal_fat_weight = float(weight) * float(fat_pct) / 100
+    await message.answer(
+        f"Goal saved: {float(weight):.1f} kg at {float(fat_pct):.1f}% (fat {goal_fat_weight:.2f} kg).",
+        reply_markup=await main_keyboard_for(message),
+    )
+
+
 @router.message(Command("cancel"))
 @router.message(F.text == CANCEL)
 async def cancel_any(message: Message, state: FSMContext) -> None:
     await state.clear()
-    await message.answer("Cancelled. Choose next action.", reply_markup=main_keyboard())
+    await message.answer("Cancelled. Choose next action.", reply_markup=await main_keyboard_for(message))
 
 
 @router.message(F.text == ADD_ENTRY)
@@ -146,7 +207,7 @@ async def edit_entry_start(message: Message, state: FSMContext) -> None:
     repo = get_repo(message)
     entries = await repo.list_recent_entries(user_id=message.from_user.id)  # type: ignore[arg-type]
     if not entries:
-        await message.answer("No entries to edit yet.", reply_markup=main_keyboard())
+        await message.answer("No entries to edit yet.", reply_markup=await main_keyboard_for(message))
         return
     await state.set_state(EditEntryState.choosing_entry)
     await state.update_data(entries=entries, edit_page=0)
@@ -173,7 +234,7 @@ async def edit_entry_choose(message: Message, state: FSMContext) -> None:
     action, value = parsed
     if action == "cancel":
         await state.clear()
-        await message.answer("Cancelled. Choose next action.", reply_markup=main_keyboard())
+        await message.answer("Cancelled. Choose next action.", reply_markup=await main_keyboard_for(message))
         return
     if action == "nav":
         page = max(0, min(total_pages - 1, page + value))
@@ -237,7 +298,7 @@ async def remove_entry_start(message: Message, state: FSMContext) -> None:
     repo = get_repo(message)
     entries = await repo.list_recent_entries(user_id=message.from_user.id)  # type: ignore[arg-type]
     if not entries:
-        await message.answer("No entries to remove.", reply_markup=main_keyboard())
+        await message.answer("No entries to remove.", reply_markup=await main_keyboard_for(message))
         return
     await state.set_state(RemoveEntryState.choosing_entry)
     await state.update_data(entries=entries, remove_page=0)
@@ -264,7 +325,7 @@ async def remove_entry_choose(message: Message, state: FSMContext) -> None:
     action, value = parsed
     if action == "cancel":
         await state.clear()
-        await message.answer("Cancelled. Choose next action.", reply_markup=main_keyboard())
+        await message.answer("Cancelled. Choose next action.", reply_markup=await main_keyboard_for(message))
         return
     if action == "nav":
         page = max(0, min(total_pages - 1, page + value))
@@ -283,9 +344,9 @@ async def remove_entry_choose(message: Message, state: FSMContext) -> None:
         deleted = await repo.delete_entry(entry_id=entry["id"], user_id=message.from_user.id)  # type: ignore[arg-type]
         await state.clear()
         if not deleted:
-            await message.answer("Could not delete entry.", reply_markup=main_keyboard())
+            await message.answer("Could not delete entry.", reply_markup=await main_keyboard_for(message))
             return
-        await message.answer(f"Deleted: {format_entry_line(entry)}", reply_markup=main_keyboard())
+        await message.answer(f"Deleted: {format_entry_line(entry)}", reply_markup=await main_keyboard_for(message))
 
 
 @router.message(F.text == STATS)
@@ -294,7 +355,7 @@ async def stats(message: Message, state: FSMContext) -> None:
     repo = get_repo(message)
     raw_series = await repo.get_fat_weight_series(user_id=message.from_user.id)  # type: ignore[arg-type]
     if not raw_series:
-        await message.answer("Need at least one entry with fat % to show stats.", reply_markup=main_keyboard())
+        await message.answer("Need at least one entry with fat % to show stats.", reply_markup=await main_keyboard_for(message))
         return
     series = parse_series(raw_series)
     latest = await repo.get_latest_fat_weight(user_id=message.from_user.id)  # type: ignore[arg-type]
@@ -306,14 +367,21 @@ async def stats(message: Message, state: FSMContext) -> None:
         height_m = float(height_cm) / 100
         if height_m > 0:
             latest_bmi = float(latest_weight) / (height_m * height_m)
+    goal_tuple = None
+    goal_fat_weight = None
+    if user.get("goal_weight_kg") is not None and user.get("goal_fat_pct") is not None:
+        goal_weight = float(user["goal_weight_kg"])
+        goal_fat_pct = float(user["goal_fat_pct"])
+        goal_fat_weight = goal_weight * goal_fat_pct / 100
+        goal_tuple = (goal_weight, goal_fat_pct, goal_fat_weight)
     fat_loss_rates = {days: compute_fat_loss_rate(raw_series, days) for days in (7, 30)}
-    summary_text = format_stats_summary(latest, latest_bmi, fat_loss_rates)
-    plot_image = build_dashboard(fat_loss_rates, series)
+    summary_text = format_stats_summary(latest, latest_bmi, fat_loss_rates, goal_tuple)
+    plot_image = build_dashboard(fat_loss_rates, series, goal_fat_weight)
     photo = BufferedInputFile(plot_image.getvalue(), filename="fat-weight.png")
     await message.answer_photo(
         photo=photo,
         caption=summary_text,
-        reply_markup=main_keyboard(),
+        reply_markup=await main_keyboard_for(message),
     )
 
 
@@ -384,7 +452,7 @@ async def add_entry_datepicker(callback: CallbackQuery, state: FSMContext) -> No
     fat_info = "" if fat_pct is None else f" and fat {fat_pct:.1f}%"
     await callback.message.answer(
         f"Entry saved: {recorded_at.date()} {float(weight):.1f} kg{fat_info}",
-        reply_markup=main_keyboard(),
+        reply_markup=await main_keyboard_for(callback),
     )
     await callback.answer("Saved")
 
@@ -451,13 +519,13 @@ async def edit_entry_datepicker(callback: CallbackQuery, state: FSMContext) -> N
     )
     await state.clear()
     if not updated:
-        await callback.message.answer("Could not update entry.", reply_markup=main_keyboard())
+        await callback.message.answer("Could not update entry.", reply_markup=await main_keyboard_for(callback))
         await callback.answer()
         return
     fat_info = "" if fat_pct is None else f" and fat {fat_pct:.1f}%"
     await callback.message.answer(
         f"Entry updated: {recorded_at.date()} {float(weight):.1f} kg{fat_info}",
-        reply_markup=main_keyboard(),
+        reply_markup=await main_keyboard_for(callback),
     )
     await callback.answer("Updated")
 
@@ -496,7 +564,7 @@ async def add_entry_duplicate_decision(callback: CallbackQuery, state: FSMContex
         await state.clear()
         await callback.message.answer(
             "Kept the existing entry. Nothing was saved.",
-            reply_markup=main_keyboard(),
+            reply_markup=await main_keyboard_for(callback),
         )
         await callback.answer()
         return
@@ -513,13 +581,13 @@ async def add_entry_duplicate_decision(callback: CallbackQuery, state: FSMContex
         )
         await state.clear()
         if not updated:
-            await callback.message.answer("Could not replace existing entry.", reply_markup=main_keyboard())
+            await callback.message.answer("Could not replace existing entry.", reply_markup=await main_keyboard_for(callback))
             await callback.answer()
             return
         fat_info = "" if fat_pct is None else f" and fat {fat_pct:.1f}%"
         await callback.message.answer(
             f"Entry replaced for {recorded_at.date()}: {float(weight):.1f} kg{fat_info}",
-            reply_markup=main_keyboard(),
+            reply_markup=await main_keyboard_for(callback),
         )
         await callback.answer("Replaced")
 
@@ -559,7 +627,7 @@ async def edit_entry_duplicate_decision(callback: CallbackQuery, state: FSMConte
         await state.clear()
         await callback.message.answer(
             "Kept the existing entry. No changes applied.",
-            reply_markup=main_keyboard(),
+            reply_markup=await main_keyboard_for(callback),
         )
         await callback.answer()
         return
@@ -575,7 +643,7 @@ async def edit_entry_duplicate_decision(callback: CallbackQuery, state: FSMConte
         )
         if not updated:
             await state.clear()
-            await callback.message.answer("Could not update entry.", reply_markup=main_keyboard())
+            await callback.message.answer("Could not update entry.", reply_markup=await main_keyboard_for(callback))
             await callback.answer()
             return
         if int(conflict_entry_id) != int(entry_id):
@@ -584,6 +652,6 @@ async def edit_entry_duplicate_decision(callback: CallbackQuery, state: FSMConte
         fat_info = "" if fat_pct is None else f" and fat {fat_pct:.1f}%"
         await callback.message.answer(
             f"Entry updated for {recorded_at.date()}: {float(weight):.1f} kg{fat_info}. Replaced existing data.",
-            reply_markup=main_keyboard(),
+            reply_markup=await main_keyboard_for(callback),
         )
         await callback.answer("Replaced")

@@ -23,10 +23,22 @@ class EntryRepository:
                 CREATE TABLE IF NOT EXISTS users (
                     id INTEGER PRIMARY KEY,
                     height_cm REAL,
+                    goal_weight_kg REAL,
+                    goal_fat_pct REAL,
                     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
                 """
             )
+            # Backfill new columns on existing DBs
+            for stmt in (
+                "ALTER TABLE users ADD COLUMN goal_weight_kg REAL",
+                "ALTER TABLE users ADD COLUMN goal_fat_pct REAL",
+            ):
+                try:
+                    await self._conn.execute(stmt)
+                except aiosqlite.OperationalError as exc:  # pragma: no cover - only on existing DBs
+                    if "duplicate column name" not in str(exc):
+                        raise
             await self._conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS entries (
@@ -49,7 +61,8 @@ class EntryRepository:
     async def get_user(self, user_id: int) -> Optional[dict[str, Any]]:
         conn = await self.connect()
         cursor = await conn.execute(
-            "SELECT id, height_cm, created_at FROM users WHERE id = :user_id", {"user_id": user_id}
+            "SELECT id, height_cm, goal_weight_kg, goal_fat_pct, created_at FROM users WHERE id = :user_id",
+            {"user_id": user_id},
         )
         row = await cursor.fetchone()
         return dict(row) if row else None
@@ -74,6 +87,18 @@ class EntryRepository:
             ON CONFLICT(id) DO UPDATE SET height_cm = excluded.height_cm
             """,
             {"user_id": user_id, "height_cm": height_cm},
+        )
+        await conn.commit()
+
+    async def set_user_goal(self, user_id: int, weight_kg: float, fat_pct: float) -> None:
+        conn = await self.connect()
+        await conn.execute(
+            """
+            INSERT INTO users (id, goal_weight_kg, goal_fat_pct)
+            VALUES (:user_id, :weight, :fat_pct)
+            ON CONFLICT(id) DO UPDATE SET goal_weight_kg = excluded.goal_weight_kg, goal_fat_pct = excluded.goal_fat_pct
+            """,
+            {"user_id": user_id, "weight": weight_kg, "fat_pct": fat_pct},
         )
         await conn.commit()
 

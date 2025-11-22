@@ -100,7 +100,8 @@ def _draw_gauge(ax: plt.Axes, label: str, rate: float | None) -> None:
     )
 
     # Fill Red value (in %)
-    red_value_start_angle = start_angle + (arc_span * (1 - rate))
+    red_rate = min(1, rate)
+    red_value_start_angle = start_angle + (arc_span * (1 - red_rate))
     red_value_end_angle = end_angle
     ax.add_patch(
         Wedge((0.5, 0.5), base_radius - 0.03, red_value_start_angle, red_value_end_angle, width=0.12, facecolor="#C50000FF", edgecolor="none")
@@ -115,8 +116,8 @@ def _draw_gauge(ax: plt.Axes, label: str, rate: float | None) -> None:
     )
 
     # Gauge
-    gauge_start_angle = start_angle + (arc_span * (1 - rate)) - 2
-    gauge_end_angle = start_angle + (arc_span * (1 - rate))
+    gauge_start_angle = start_angle + (arc_span * (1 - red_rate)) - 2
+    gauge_end_angle = start_angle + (arc_span * (1 - red_rate))
     ax.add_patch(
         Wedge((0.5, 0.5), base_radius, gauge_start_angle, gauge_end_angle, width=0.45, facecolor="#111111BB", edgecolor="none")
     )
@@ -124,11 +125,13 @@ def _draw_gauge(ax: plt.Axes, label: str, rate: float | None) -> None:
 
 
 def build_dashboard(
-    fat_loss_rates: dict[int, float | None], series: Sequence[tuple[datetime, float]] | None = None
+    fat_loss_rates: dict[int, float | None],
+    series: Sequence[tuple[datetime, float]] | None = None,
+    goal_fat_weight: float | None = None,
 ) -> io.BytesIO:
-    fig = plt.figure(figsize=(8, 8))
+    fig = plt.figure(figsize=(8, 11))
     fig.patch.set_facecolor("white")
-    gs = fig.add_gridspec(2, 2, height_ratios=[1, 1.2], hspace=0.55)
+    gs = fig.add_gridspec(2, 2, height_ratios=[1.2, 1], hspace=0.55)
 
     gauges = [fig.add_subplot(gs[0, 0]), fig.add_subplot(gs[0, 1])]
     labels = [("7-day fat loss rate", fat_loss_rates.get(7)), ("30-day fat loss rate", fat_loss_rates.get(30))]
@@ -141,6 +144,9 @@ def build_dashboard(
         values = [val for _, val in series]
         line_ax.plot(dates, values, marker="o", linewidth=2, color="#1f77b4")
         line_ax.set_xlim(min(dates), max(dates))
+        if goal_fat_weight is not None:
+            line_ax.axhline(goal_fat_weight, linestyle="--", color="#8a8a8a", linewidth=1.5, label="Goal fat weight")
+            line_ax.legend(loc="upper right")
         line_ax.grid(True, linestyle="--", alpha=0.4)
         line_ax.set_xlabel("Date")
         line_ax.set_ylabel("Fat weight (kg)")

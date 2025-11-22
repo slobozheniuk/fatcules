@@ -9,6 +9,8 @@ ADD_ENTRY = "Add entry"
 EDIT_ENTRY = "Edit entry"
 REMOVE_ENTRY = "Remove entry"
 STATS = "Stats"
+ADD_GOAL = "Add goal"
+EDIT_GOAL = "Edit goal"
 CANCEL = "Cancel"
 SKIP_FAT = "Skip fat %"
 DATEPICKER_PREFIX = "DP"
@@ -18,11 +20,13 @@ EDIT_PREV = "◀ Prev"
 EDIT_NEXT = "Next ▶"
 
 
-def main_keyboard() -> ReplyKeyboardMarkup:
+def main_keyboard(goal_set: bool = False) -> ReplyKeyboardMarkup:
+    goal_label = EDIT_GOAL if goal_set else ADD_GOAL
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text=ADD_ENTRY), KeyboardButton(text=EDIT_ENTRY)],
             [KeyboardButton(text=REMOVE_ENTRY), KeyboardButton(text=STATS)],
+            [KeyboardButton(text=goal_label)],
         ],
         resize_keyboard=True,
         input_field_placeholder="Choose an action",

@@ -17,7 +17,7 @@ Python Telegram bot for tracking weight and fat percentage using aiogram v3 and 
 - If a date already has an entry, users choose to replace existing data, pick a different date, or keep the current entry.
 - Statistics return a picture showing:
   - Fat weight (`total weight * fat percentage`).
-  - Dashboard gauges for 7-day and 30-day fat loss rates plus a fat-weight-over-time line chart (6–45 kg range).
+  - Dashboard gauges for 7-day and 30-day fat loss rates plus a fat-weight-over-time line chart with a dashed goal line (if set).
   - Latest BMI (when height is set).
   - 7-day and 30-day fat loss rates (difference in fat weight over difference in body weight).
 - Store measurements in a lightweight database.
@@ -27,8 +27,9 @@ Python Telegram bot for tracking weight and fat percentage using aiogram v3 and 
 ## Notes
 - Data is stored in `./data/fatcules.db` (configurable via `DATABASE_PATH`).
 - `.env` is auto-loaded at startup if present.
-- Commands/buttons: Add entry, Edit entry, Remove entry, Stats, and /start to reset.
+- Commands/buttons: Add entry, Edit entry, Remove entry, Stats, Add goal/Edit goal, and /start to reset.
 - Height is stored per user; new users are prompted on /start to send height (50-250 cm) and it can be updated anytime with `/set_height <cm>`. Stats include latest BMI when height is set.
+- Goals: tap "Add goal" (or "Edit goal" if set) to save target weight and fat %. The stats graph shows a dashed line at the goal fat weight.
 - Add/Edit flows show an inline date picker; today/entry date is preselected but any date can be chosen.
 - Edit/Delete selection uses a paginated custom keyboard (Prev/Next) instead of inline buttons.
 - Weight and fat inputs use a numpad-style custom keyboard; type digits then press Enter (fat input keeps a Skip button).
