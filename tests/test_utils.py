@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 import unittest
 
 from fatcules.formatting import format_stats_summary, parse_float, parse_height_cm
-from fatcules.stats import average_daily_drop, compute_fat_loss_rate, parse_series
+from fatcules.stats import average_daily_drop, build_dashboard, compute_fat_loss_rate, parse_series
 
 
 class TestParsing(unittest.TestCase):
@@ -59,6 +59,10 @@ class TestStats(unittest.TestCase):
         now = datetime.now(timezone.utc)
         entries = [{"recorded_at": now.isoformat(), "fat_weight_kg": 10.0, "weight_kg": 78.0}]
         self.assertIsNone(compute_fat_loss_rate(entries, 7))
+
+    def test_build_dashboard_returns_image(self) -> None:
+        image = build_dashboard({7: 0.1, 30: 0.2})
+        self.assertGreater(len(image.getvalue()), 0)
 
 
 class TestFormatting(unittest.TestCase):

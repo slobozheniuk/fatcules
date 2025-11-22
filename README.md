@@ -17,7 +17,7 @@ Python Telegram bot for tracking weight and fat percentage using aiogram v3 and 
 - If a date already has an entry, users choose to replace existing data, pick a different date, or keep the current entry.
 - Statistics return a picture showing:
   - Fat weight (`total weight * fat percentage`).
-  - Graph of fat weight over time.
+  - Dashboard gauges for 7-day and 30-day fat loss rates.
   - Latest BMI (when height is set).
   - 7-day and 30-day fat loss rates (difference in fat weight over difference in body weight).
 - Store measurements in a lightweight database.
