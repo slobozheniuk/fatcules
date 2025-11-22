@@ -61,7 +61,9 @@ class TestStats(unittest.TestCase):
         self.assertIsNone(compute_fat_loss_rate(entries, 7))
 
     def test_build_dashboard_returns_image(self) -> None:
-        image = build_dashboard({7: 0.1, 30: 0.2})
+        now = datetime.now(timezone.utc)
+        series = [(now - timedelta(days=1), 12.0), (now, 11.5)]
+        image = build_dashboard({7: 0.1, 30: 0.2}, series)
         self.assertGreater(len(image.getvalue()), 0)
 
 
