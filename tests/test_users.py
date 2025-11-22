@@ -49,6 +49,9 @@ class UserRepositoryTests(unittest.IsolatedAsyncioTestCase):
 
         latest = await self.repo.get_latest_weight(42)
         self.assertEqual(latest, 81.0)
+        # ensure fat series includes weight
+        series = await self.repo.get_fat_weight_series(42)
+        self.assertTrue(all("weight_kg" in item for item in series))
 
 
 if __name__ == "__main__":

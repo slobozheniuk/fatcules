@@ -168,7 +168,7 @@ class EntryRepository:
         conn = await self.connect()
         cursor = await conn.execute(
             """
-            SELECT recorded_at, fat_weight_kg
+            SELECT recorded_at, fat_weight_kg, weight_kg
             FROM entries
             WHERE user_id = :user_id AND fat_weight_kg IS NOT NULL
             ORDER BY recorded_at ASC

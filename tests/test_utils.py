@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 import unittest
 
 from fatcules.formatting import format_stats_summary, parse_float, parse_height_cm
-from fatcules.stats import average_daily_drop, parse_series
+from fatcules.stats import average_daily_drop, compute_fat_loss_rate, parse_series
 
 
 class TestParsing(unittest.TestCase):
@@ -45,12 +45,29 @@ class TestStats(unittest.TestCase):
         self.assertEqual(len(parsed), 1)
         self.assertEqual(parsed[0][1], 10.5)
 
+    def test_compute_fat_loss_rate(self) -> None:
+        now = datetime.now(timezone.utc)
+        entries = [
+            {"recorded_at": (now - timedelta(days=8)).isoformat(), "fat_weight_kg": 12.0, "weight_kg": 80.0},
+            {"recorded_at": now.isoformat(), "fat_weight_kg": 10.0, "weight_kg": 78.0},
+        ]
+        rate = compute_fat_loss_rate(entries, 7)
+        expected = (12.0 - 10.0) / (80.0 - 78.0)
+        self.assertTrue(math.isclose(rate or 0, expected, rel_tol=1e-6))
+
+    def test_compute_fat_loss_rate_not_enough(self) -> None:
+        now = datetime.now(timezone.utc)
+        entries = [{"recorded_at": now.isoformat(), "fat_weight_kg": 10.0, "weight_kg": 78.0}]
+        self.assertIsNone(compute_fat_loss_rate(entries, 7))
+
 
 class TestFormatting(unittest.TestCase):
     def test_format_stats_summary(self) -> None:
-        summary = format_stats_summary(9.9, 24.6)
+        summary = format_stats_summary(9.9, 24.6, {7: 0.15, 30: None})
         self.assertIn("Current fat weight: 9.90 kg", summary)
         self.assertIn("Latest BMI: 24.6", summary)
+        self.assertIn("7d: 0.150 fat kg per kg weight", summary)
+        self.assertIn("30d: not enough data", summary)
 
 
 if __name__ == "__main__":

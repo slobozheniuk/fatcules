@@ -30,7 +30,7 @@ from .keyboards import (
     parse_edit_selection_text,
 )
 from .states import AddEntryState, EditEntryState, RemoveEntryState, SetHeightState
-from .stats import build_plot, parse_series
+from .stats import build_plot, compute_fat_loss_rate, parse_series
 
 router = Router()
 
@@ -306,7 +306,8 @@ async def stats(message: Message, state: FSMContext) -> None:
         height_m = float(height_cm) / 100
         if height_m > 0:
             latest_bmi = float(latest_weight) / (height_m * height_m)
-    summary_text = format_stats_summary(latest, latest_bmi)
+    fat_loss_rates = {days: compute_fat_loss_rate(raw_series, days) for days in (7, 30)}
+    summary_text = format_stats_summary(latest, latest_bmi, fat_loss_rates)
     plot_image = build_plot(series, summary_text)
     photo = BufferedInputFile(plot_image.getvalue(), filename="fat-weight.png")
     await message.answer_photo(
