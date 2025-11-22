@@ -30,7 +30,7 @@ from .keyboards import (
     parse_edit_selection_text,
 )
 from .states import AddEntryState, EditEntryState, RemoveEntryState, SetHeightState
-from .stats import average_daily_drop, build_plot, parse_series
+from .stats import build_plot, parse_series
 
 router = Router()
 
@@ -297,7 +297,6 @@ async def stats(message: Message, state: FSMContext) -> None:
         await message.answer("Need at least one entry with fat % to show stats.", reply_markup=main_keyboard())
         return
     series = parse_series(raw_series)
-    drops = {days: average_daily_drop(series, days) for days in (7, 14, 30)}
     latest = await repo.get_latest_fat_weight(user_id=message.from_user.id)  # type: ignore[arg-type]
     user = await repo.ensure_user(message.from_user.id)  # type: ignore[arg-type]
     latest_weight = await repo.get_latest_weight(user_id=message.from_user.id)  # type: ignore[arg-type]
@@ -307,7 +306,7 @@ async def stats(message: Message, state: FSMContext) -> None:
         height_m = float(height_cm) / 100
         if height_m > 0:
             latest_bmi = float(latest_weight) / (height_m * height_m)
-    summary_text = format_stats_summary(latest, drops, latest_bmi)
+    summary_text = format_stats_summary(latest, latest_bmi)
     plot_image = build_plot(series, summary_text)
     photo = BufferedInputFile(plot_image.getvalue(), filename="fat-weight.png")
     await message.answer_photo(

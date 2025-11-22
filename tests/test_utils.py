@@ -48,10 +48,8 @@ class TestStats(unittest.TestCase):
 
 class TestFormatting(unittest.TestCase):
     def test_format_stats_summary(self) -> None:
-        summary = format_stats_summary(9.9, {7: -0.2, 14: None, 30: -0.1}, 24.6)
+        summary = format_stats_summary(9.9, 24.6)
         self.assertIn("Current fat weight: 9.90 kg", summary)
-        self.assertIn("7d: -0.200 kg/day", summary)
-        self.assertIn("14d: not enough data", summary)
         self.assertIn("Latest BMI: 24.6", summary)
 
 
