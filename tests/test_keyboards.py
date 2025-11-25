@@ -20,7 +20,7 @@ class EditKeyboardTests(unittest.TestCase):
         first_row = kb.keyboard[0]
         self.assertTrue(first_row[0].text.startswith("1. 2024-01-01"))
         self.assertIn("71.0", first_row[0].text)
-        self.assertTrue(first_row[1].text.startswith("🗑 1"))
+        self.assertTrue(first_row[1].text.startswith("🗑1"))
         # nav row should include Cancel and Next
         nav_texts = [btn.text for btn in kb.keyboard[-1]]
         self.assertIn("Cancel", nav_texts)
@@ -31,7 +31,7 @@ class EditKeyboardTests(unittest.TestCase):
         self.assertEqual(parse_edit_selection_text(EDIT_NEXT), ("nav", 1))
         self.assertEqual(parse_edit_selection_text(EDIT_PREV), ("nav", -1))
         self.assertEqual(parse_edit_selection_text("3. 2024-01-03: 73.0 kg"), ("pick", 2))
-        self.assertEqual(parse_edit_selection_text("🗑 3"), ("delete", 2))
+        self.assertEqual(parse_edit_selection_text("🗑3"), ("delete", 2))
         self.assertEqual(parse_edit_selection_text("Cancel"), ("cancel", 0))
 
     def test_second_page_numbering_and_nav(self) -> None:
@@ -43,7 +43,7 @@ class EditKeyboardTests(unittest.TestCase):
         # first row on second page should start with 4 (global index)
         second_page_first = kb.keyboard[0]
         self.assertTrue(second_page_first[0].text.startswith("4. 2024-01-04"))
-        self.assertTrue(second_page_first[1].text.startswith("🗑 4"))
+        self.assertTrue(second_page_first[1].text.startswith("🗑4"))
         nav_texts = [btn.text for btn in kb.keyboard[-1]]
         self.assertIn(EDIT_PREV, nav_texts)
         self.assertIn("Cancel", nav_texts)

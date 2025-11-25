@@ -196,7 +196,7 @@ def edit_entries_keyboard(
         rows.append(
             [
                 KeyboardButton(text=f"{idx + 1}. {_entry_label(entry)}"),
-                KeyboardButton(text=f"{DELETE_ICON} {idx + 1}"),
+                KeyboardButton(text=f"{DELETE_ICON}{idx + 1}"),
             ]
         )
     nav_row: list[KeyboardButton] = []
@@ -221,11 +221,9 @@ def parse_edit_selection_text(text: str) -> tuple[str, int] | None:
     if text == CANCEL:
         return ("cancel", 0)
     if text.startswith(DELETE_ICON):
-        parts = text.replace(DELETE_ICON, "", 1).strip().split(maxsplit=1)
-        if not parts:
-            return None
+        stripped = text.replace(DELETE_ICON, "", 1).strip()
         try:
-            idx = int(parts[0]) - 1
+            idx = int(stripped) - 1
         except ValueError:
             return None
         return ("delete", idx)

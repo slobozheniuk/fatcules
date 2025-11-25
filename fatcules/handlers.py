@@ -48,9 +48,15 @@ def get_repo(message: Message) -> EntryRepository:
 
 
 async def _show_edit_entries(
-    message: Message, state: FSMContext, repo: EntryRepository, page: int = 0, prefix: str = "Pick an entry to edit or delete"
+    message: Message,
+    state: FSMContext,
+    repo: EntryRepository,
+    page: int = 0,
+    prefix: str = "Pick an entry to edit or delete",
+    entries: list[dict] | None = None,
 ) -> None:
-    entries = await repo.list_recent_entries(user_id=message.from_user.id)  # type: ignore[arg-type]
+    if entries is None:
+        entries = await repo.list_recent_entries(user_id=message.from_user.id)  # type: ignore[arg-type]
     if not entries:
         await state.clear()
         await message.answer("No entries to edit.", reply_markup=await main_keyboard_for(message))
@@ -281,7 +287,7 @@ async def edit_entry_choose(message: Message, state: FSMContext) -> None:
             await message.answer("Out of range. Try again.", reply_markup=edit_entries_keyboard(entries, page=page))
             return
         entry = entries[value]
-        await state.update_data(entry_id=entry["id"], entry_recorded_at=entry["recorded_at"])
+        await state.update_data(entry_id=entry["id"], entry_recorded_at=entry["recorded_at"], entry_index=value)
         await state.set_state(EditEntryState.weight)
         await message.answer(
             f"Send new weight for {format_entry_line(entry)}",
@@ -501,6 +507,20 @@ async def edit_entry_datepicker(callback: CallbackQuery, state: FSMContext) -> N
         weight_kg=float(weight),
         fat_pct=fat_pct if fat_pct is not None else None,
     )
+    updated_entries = data.get("entries") or []
+    if updated_entries:
+        # Replace the edited entry in the local list and keep ordering by recorded_at desc
+        updated_entry_payload = {
+            "id": int(data["entry_id"]),
+            "user_id": callback.from_user.id,
+            "recorded_at": recorded_at.isoformat(),
+            "weight_kg": float(weight),
+            "fat_pct": fat_pct if fat_pct is not None else None,
+            "fat_weight_kg": (float(weight) * float(fat_pct) / 100) if fat_pct is not None else None,
+        }
+        updated_entries = [e for e in updated_entries if int(e["id"]) != int(data["entry_id"])]
+        updated_entries.append(updated_entry_payload)
+        updated_entries.sort(key=lambda e: e.get("recorded_at"), reverse=True)
     if not updated:
         await _show_edit_entries(
             callback.message,
@@ -508,6 +528,7 @@ async def edit_entry_datepicker(callback: CallbackQuery, state: FSMContext) -> N
             repo,
             page=page,
             prefix="Could not update entry. Pick an entry to edit or delete",
+            entries=updated_entries or None,
         )
         await callback.answer()
         return
@@ -518,6 +539,7 @@ async def edit_entry_datepicker(callback: CallbackQuery, state: FSMContext) -> N
         repo,
         page=page,
         prefix=f"Entry updated: {recorded_at.date()} {float(weight):.1f} kg{fat_info}. Pick an entry to edit or delete",
+        entries=updated_entries or None,
     )
     await callback.answer("Updated")
 
@@ -624,6 +646,7 @@ async def edit_entry_duplicate_decision(callback: CallbackQuery, state: FSMConte
             repo,
             page=page,
             prefix="Kept the existing entry. Pick an entry to edit or delete",
+            entries=data.get("entries") or None,
         )
         await callback.answer()
         return
@@ -644,12 +667,27 @@ async def edit_entry_duplicate_decision(callback: CallbackQuery, state: FSMConte
                 repo,
                 page=page,
                 prefix="Could not update entry. Pick an entry to edit or delete",
+                entries=data.get("entries") or None,
             )
             await callback.answer()
             return
         if int(conflict_entry_id) != int(entry_id):
             await repo.delete_entry(entry_id=int(conflict_entry_id), user_id=callback.from_user.id)  # type: ignore[arg-type]
         fat_info = "" if fat_pct is None else f" and fat {fat_pct:.1f}%"
+        entries = data.get("entries") or []
+        if entries:
+            entries = [e for e in entries if int(e["id"]) != int(entry_id) and int(e["id"]) != int(conflict_entry_id)]
+            entries.append(
+                {
+                    "id": int(entry_id),
+                    "user_id": callback.from_user.id,
+                    "recorded_at": recorded_at.isoformat(),
+                    "weight_kg": float(weight),
+                    "fat_pct": fat_pct if fat_pct is not None else None,
+                    "fat_weight_kg": (float(weight) * float(fat_pct) / 100) if fat_pct is not None else None,
+                }
+            )
+            entries.sort(key=lambda e: e.get("recorded_at"), reverse=True)
         await _show_edit_entries(
             callback.message,
             state,
@@ -659,5 +697,6 @@ async def edit_entry_duplicate_decision(callback: CallbackQuery, state: FSMConte
                 f"Entry updated for {recorded_at.date()}: {float(weight):.1f} kg{fat_info}. "
                 "Replaced existing data. Pick an entry to edit or delete"
             ),
+            entries=entries or None,
         )
         await callback.answer("Replaced")
