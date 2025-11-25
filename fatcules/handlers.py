@@ -18,7 +18,6 @@ from .keyboards import (
     EDIT_PAGE_SIZE,
     EDIT_ENTRY,
     EDIT_GOAL,
-    REMOVE_ENTRY,
     SKIP_FAT,
     STATS,
     cancel_keyboard,
@@ -31,7 +30,7 @@ from .keyboards import (
     parse_duplicate_decision,
     parse_edit_selection_text,
 )
-from .states import AddEntryState, EditEntryState, GoalState, RemoveEntryState, SetHeightState
+from .states import AddEntryState, EditEntryState, GoalState, SetHeightState
 from .stats import build_dashboard, compute_fat_loss_rate, parse_series, project_goal_date
 
 router = Router()
@@ -46,6 +45,25 @@ def get_repo(message: Message) -> EntryRepository:
     if not isinstance(repo, EntryRepository):
         raise RuntimeError("Repository is not configured")
     return repo
+
+
+async def _show_edit_entries(
+    message: Message, state: FSMContext, repo: EntryRepository, page: int = 0, prefix: str = "Pick an entry to edit or delete"
+) -> None:
+    entries = await repo.list_recent_entries(user_id=message.from_user.id)  # type: ignore[arg-type]
+    if not entries:
+        await state.clear()
+        await message.answer("No entries to edit.", reply_markup=await main_keyboard_for(message))
+        return
+    total_pages = max(1, (len(entries) + EDIT_PAGE_SIZE - 1) // EDIT_PAGE_SIZE)
+    page = max(0, min(total_pages - 1, page))
+    await state.clear()
+    await state.set_state(EditEntryState.choosing_entry)
+    await state.update_data(entries=entries, edit_page=page)
+    await message.answer(
+        f"{prefix} (page {page + 1}/{total_pages}):",
+        reply_markup=edit_entries_keyboard(entries, page=page),
+    )
 
 
 async def _save_height(user_id: int, height: float, message: Message, state: FSMContext) -> None:
@@ -211,17 +229,7 @@ async def add_entry_fat(message: Message, state: FSMContext) -> None:
 @router.message(F.text == EDIT_ENTRY)
 async def edit_entry_start(message: Message, state: FSMContext) -> None:
     repo = get_repo(message)
-    entries = await repo.list_recent_entries(user_id=message.from_user.id)  # type: ignore[arg-type]
-    if not entries:
-        await message.answer("No entries to edit yet.", reply_markup=await main_keyboard_for(message))
-        return
-    await state.set_state(EditEntryState.choosing_entry)
-    await state.update_data(entries=entries, edit_page=0)
-    total_pages = max(1, (len(entries) + EDIT_PAGE_SIZE - 1) // EDIT_PAGE_SIZE)
-    await message.answer(
-        f"Pick an entry to edit (page 1/{total_pages}):",
-        reply_markup=edit_entries_keyboard(entries, page=0),
-    )
+    await _show_edit_entries(message, state, repo, page=0, prefix="Pick an entry to edit or delete")
 
 
 @router.message(EditEntryState.choosing_entry)
@@ -233,7 +241,7 @@ async def edit_entry_choose(message: Message, state: FSMContext) -> None:
     total_pages = max(1, (len(entries) + EDIT_PAGE_SIZE - 1) // EDIT_PAGE_SIZE)
     if parsed is None:
         await message.answer(
-            "Use the keyboard buttons to pick an entry or navigate.",
+            "Use the keyboard buttons to pick, delete, or navigate entries.",
             reply_markup=edit_entries_keyboard(entries, page=page),
         )
         return
@@ -246,8 +254,26 @@ async def edit_entry_choose(message: Message, state: FSMContext) -> None:
         page = max(0, min(total_pages - 1, page + value))
         await state.update_data(edit_page=page)
         await message.answer(
-            f"Pick an entry to edit (page {page + 1}/{total_pages}):",
+            f"Pick an entry to edit or delete (page {page + 1}/{total_pages}):",
             reply_markup=edit_entries_keyboard(entries, page=page),
+        )
+        return
+    if action == "delete":
+        if value < 0 or value >= len(entries):
+            await message.answer("Out of range. Try again.", reply_markup=edit_entries_keyboard(entries, page=page))
+            return
+        entry = entries[value]
+        repo = get_repo(message)
+        deleted = await repo.delete_entry(entry_id=entry["id"], user_id=message.from_user.id)  # type: ignore[arg-type]
+        if not deleted:
+            await message.answer("Could not delete entry.", reply_markup=edit_entries_keyboard(entries, page=page))
+            return
+        await _show_edit_entries(
+            message,
+            state,
+            repo,
+            page=page,
+            prefix=f"Deleted: {format_entry_line(entry)}. Pick an entry to edit or delete",
         )
         return
     if action == "pick":
@@ -297,62 +323,6 @@ async def edit_entry_fat(message: Message, state: FSMContext) -> None:
         "Pick a date (defaults to the entry's current date). Use the calendar or type Cancel.",
         reply_markup=datepicker_keyboard(prefix="edit", month=default_date, default_date=default_date),
     )
-
-
-@router.message(F.text == REMOVE_ENTRY)
-async def remove_entry_start(message: Message, state: FSMContext) -> None:
-    repo = get_repo(message)
-    entries = await repo.list_recent_entries(user_id=message.from_user.id)  # type: ignore[arg-type]
-    if not entries:
-        await message.answer("No entries to remove.", reply_markup=await main_keyboard_for(message))
-        return
-    await state.set_state(RemoveEntryState.choosing_entry)
-    await state.update_data(entries=entries, remove_page=0)
-    total_pages = max(1, (len(entries) + EDIT_PAGE_SIZE - 1) // EDIT_PAGE_SIZE)
-    await message.answer(
-        f"Pick an entry to delete (page 1/{total_pages}):",
-        reply_markup=edit_entries_keyboard(entries, page=0),
-    )
-
-
-@router.message(RemoveEntryState.choosing_entry)
-async def remove_entry_choose(message: Message, state: FSMContext) -> None:
-    data = await state.get_data()
-    entries = data.get("entries") or []
-    page = int(data.get("remove_page") or 0)
-    parsed = parse_edit_selection_text(message.text or "")
-    total_pages = max(1, (len(entries) + EDIT_PAGE_SIZE - 1) // EDIT_PAGE_SIZE)
-    if parsed is None:
-        await message.answer(
-            "Use the keyboard buttons to pick an entry or navigate.",
-            reply_markup=edit_entries_keyboard(entries, page=page),
-        )
-        return
-    action, value = parsed
-    if action == "cancel":
-        await state.clear()
-        await message.answer("Cancelled. Choose next action.", reply_markup=await main_keyboard_for(message))
-        return
-    if action == "nav":
-        page = max(0, min(total_pages - 1, page + value))
-        await state.update_data(remove_page=page)
-        await message.answer(
-            f"Pick an entry to delete (page {page + 1}/{total_pages}):",
-            reply_markup=edit_entries_keyboard(entries, page=page),
-        )
-        return
-    if action == "pick":
-        if value < 0 or value >= len(entries):
-            await message.answer("Out of range. Try again.", reply_markup=edit_entries_keyboard(entries, page=page))
-            return
-        entry = entries[value]
-        repo = get_repo(message)
-        deleted = await repo.delete_entry(entry_id=entry["id"], user_id=message.from_user.id)  # type: ignore[arg-type]
-        await state.clear()
-        if not deleted:
-            await message.answer("Could not delete entry.", reply_markup=await main_keyboard_for(message))
-            return
-        await message.answer(f"Deleted: {format_entry_line(entry)}", reply_markup=await main_keyboard_for(message))
 
 
 @router.message(F.text == STATS)
@@ -497,6 +467,7 @@ async def edit_entry_datepicker(callback: CallbackQuery, state: FSMContext) -> N
         return
     selected_date = date.fromisoformat(payload)
     data = await state.get_data()
+    page = int(data.get("edit_page") or 0)
     if callback.message is None or "entry_id" not in data:
         await state.clear()
         await callback.answer("Something went wrong. Please start again.", show_alert=True)
@@ -530,15 +501,23 @@ async def edit_entry_datepicker(callback: CallbackQuery, state: FSMContext) -> N
         weight_kg=float(weight),
         fat_pct=fat_pct if fat_pct is not None else None,
     )
-    await state.clear()
     if not updated:
-        await callback.message.answer("Could not update entry.", reply_markup=await main_keyboard_for(callback))
+        await _show_edit_entries(
+            callback.message,
+            state,
+            repo,
+            page=page,
+            prefix="Could not update entry. Pick an entry to edit or delete",
+        )
         await callback.answer()
         return
     fat_info = "" if fat_pct is None else f" and fat {fat_pct:.1f}%"
-    await callback.message.answer(
-        f"Entry updated: {recorded_at.date()} {float(weight):.1f} kg{fat_info}",
-        reply_markup=await main_keyboard_for(callback),
+    await _show_edit_entries(
+        callback.message,
+        state,
+        repo,
+        page=page,
+        prefix=f"Entry updated: {recorded_at.date()} {float(weight):.1f} kg{fat_info}. Pick an entry to edit or delete",
     )
     await callback.answer("Updated")
 
@@ -623,6 +602,7 @@ async def edit_entry_duplicate_decision(callback: CallbackQuery, state: FSMConte
     conflict_entry_id = data.get("conflict_entry_id")
     weight = data.get("weight_kg")
     fat_pct = data.get("fat_pct")
+    page = int(data.get("edit_page") or 0)
     if callback.message is None or entry_id is None or weight is None or conflict_entry_id is None:
         await state.clear()
         await callback.answer("Something went wrong. Please start again.", show_alert=True)
@@ -637,10 +617,13 @@ async def edit_entry_duplicate_decision(callback: CallbackQuery, state: FSMConte
         await callback.answer()
         return
     if action == "keep":
-        await state.clear()
-        await callback.message.answer(
-            "Kept the existing entry. No changes applied.",
-            reply_markup=await main_keyboard_for(callback),
+        repo = get_repo(callback.message)
+        await _show_edit_entries(
+            callback.message,
+            state,
+            repo,
+            page=page,
+            prefix="Kept the existing entry. Pick an entry to edit or delete",
         )
         await callback.answer()
         return
@@ -655,16 +638,26 @@ async def edit_entry_duplicate_decision(callback: CallbackQuery, state: FSMConte
             fat_pct=fat_pct if fat_pct is not None else None,
         )
         if not updated:
-            await state.clear()
-            await callback.message.answer("Could not update entry.", reply_markup=await main_keyboard_for(callback))
+            await _show_edit_entries(
+                callback.message,
+                state,
+                repo,
+                page=page,
+                prefix="Could not update entry. Pick an entry to edit or delete",
+            )
             await callback.answer()
             return
         if int(conflict_entry_id) != int(entry_id):
             await repo.delete_entry(entry_id=int(conflict_entry_id), user_id=callback.from_user.id)  # type: ignore[arg-type]
-        await state.clear()
         fat_info = "" if fat_pct is None else f" and fat {fat_pct:.1f}%"
-        await callback.message.answer(
-            f"Entry updated for {recorded_at.date()}: {float(weight):.1f} kg{fat_info}. Replaced existing data.",
-            reply_markup=await main_keyboard_for(callback),
+        await _show_edit_entries(
+            callback.message,
+            state,
+            repo,
+            page=page,
+            prefix=(
+                f"Entry updated for {recorded_at.date()}: {float(weight):.1f} kg{fat_info}. "
+                "Replaced existing data. Pick an entry to edit or delete"
+            ),
         )
         await callback.answer("Replaced")

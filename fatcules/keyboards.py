@@ -6,8 +6,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardBu
 
 
 ADD_ENTRY = "Add entry"
-EDIT_ENTRY = "Edit entry"
-REMOVE_ENTRY = "Remove entry"
+EDIT_ENTRY = "Edit entries"
 STATS = "Stats"
 ADD_GOAL = "Add goal"
 EDIT_GOAL = "Edit goal"
@@ -18,6 +17,7 @@ DUPLICATE_PREFIX = "DUP"
 EDIT_PAGE_SIZE = 5
 EDIT_PREV = "◀ Prev"
 EDIT_NEXT = "Next ▶"
+DELETE_ICON = "🗑"
 
 
 def main_keyboard(goal_set: bool = False) -> ReplyKeyboardMarkup:
@@ -25,7 +25,7 @@ def main_keyboard(goal_set: bool = False) -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text=ADD_ENTRY), KeyboardButton(text=EDIT_ENTRY)],
-            [KeyboardButton(text=REMOVE_ENTRY), KeyboardButton(text=STATS)],
+            [KeyboardButton(text=STATS)],
             [KeyboardButton(text=goal_label)],
         ],
         resize_keyboard=True,
@@ -193,7 +193,12 @@ def edit_entries_keyboard(
     end = min(start + page_size, total)
     rows: list[list[KeyboardButton]] = []
     for idx, entry in enumerate(entries[start:end], start=start):
-        rows.append([KeyboardButton(text=f"{idx + 1}. {_entry_label(entry)}")])
+        rows.append(
+            [
+                KeyboardButton(text=f"{idx + 1}. {_entry_label(entry)}"),
+                KeyboardButton(text=f"{DELETE_ICON} {idx + 1}"),
+            ]
+        )
     nav_row: list[KeyboardButton] = []
     if page > 0:
         nav_row.append(KeyboardButton(text=EDIT_PREV))
@@ -215,6 +220,15 @@ def parse_edit_selection_text(text: str) -> tuple[str, int] | None:
         return ("nav", -1)
     if text == CANCEL:
         return ("cancel", 0)
+    if text.startswith(DELETE_ICON):
+        parts = text.replace(DELETE_ICON, "", 1).strip().split(maxsplit=1)
+        if not parts:
+            return None
+        try:
+            idx = int(parts[0]) - 1
+        except ValueError:
+            return None
+        return ("delete", idx)
     parts = text.split(".", maxsplit=1)
     try:
         idx = int(parts[0]) - 1

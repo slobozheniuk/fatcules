@@ -16,11 +16,6 @@ class EditEntryState(StatesGroup):
     confirm_existing = State()
 
 
-class RemoveEntryState(StatesGroup):
-    choosing_entry = State()
-    remove_page = State()
-
-
 class SetHeightState(StatesGroup):
     entering = State()
 
