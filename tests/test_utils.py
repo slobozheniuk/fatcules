@@ -81,6 +81,27 @@ class TestFormatting(unittest.TestCase):
 
 
 class GoalProjectionTests(unittest.TestCase):
+    def test_average_is_same_regardless_of_input_order(self) -> None:
+        now = datetime(2024, 5, 10, tzinfo=timezone.utc)
+        series = [
+            (now - timedelta(days=31), 22.0),
+            (now - timedelta(days=5), 18.0),
+            (now - timedelta(days=10), 20.0),
+            (now, 15.0),
+        ]
+        series_reverse = [
+            (now - timedelta(days=31), 27.0),
+            (now, 15.0),
+            (now - timedelta(days=10), 20.0),
+            (now - timedelta(days=5), 18.0),
+        ]
+        projected_date, reason = project_goal_date(series, 12.0, now=now)
+        projected_date_rev, reason_rev = project_goal_date(series_reverse, 12.0, now=now)
+        self.assertEqual(projected_date, (now + timedelta(days=5)).date())
+        self.assertEqual(projected_date_rev, (now + timedelta(days=5)).date())
+        self.assertIsNone(reason)
+        self.assertIsNone(reason_rev)
+
     def test_projection_with_recent_progress(self) -> None:
         now = datetime(2024, 5, 10, tzinfo=timezone.utc)
         series = [

@@ -48,20 +48,31 @@ def weighted_average_daily_fat_loss(
     window = [(dt, value) for dt, value in series if dt >= cutoff]
     if len(window) < 2:
         return None
+
+    raw_weights: list[float] = []
+    weighted_values: list[float] = []
+
     window.sort(key=lambda x: x[0])
-    total_change = 0.0
-    total_days = 0.0
-    prev_dt, prev_val = window[0]
-    for dt, val in window[1:]:
-        delta_days = (dt - prev_dt).total_seconds() / 86400
-        if delta_days <= 0:
+    
+    for idx, (dt, value) in enumerate(window):
+        if idx == 0:
             continue
-        total_change += prev_val - val
-        total_days += delta_days
-        prev_dt, prev_val = dt, val
-    if total_days <= 0:
-        return None
-    return total_change / total_days
+        days_back = (now_dt - dt).days
+        if days_back < 0:
+            days_back = 0
+        if days_back == 0:
+            raw_weight = 1.0
+        else:
+            raw_weight = 1 / (1 + (days_back / days))
+        raw_weights.append(raw_weight)
+        prev_value = window[idx - 1][1]
+        prev_days_back = (now_dt - window[idx - 1][0]).days
+        diff_value = prev_value - value
+        diff_days_back = prev_days_back - days_back
+        average_diff_per_day = diff_value / diff_days_back if diff_days_back != 0 else value
+        weighted_values.append(average_diff_per_day * raw_weight)
+
+    return sum(weighted_values) / sum(raw_weights)  
 
 
 def build_plot(series: Sequence[tuple[datetime, float]], summary: str) -> io.BytesIO:
