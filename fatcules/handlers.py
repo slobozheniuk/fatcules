@@ -32,7 +32,7 @@ from .keyboards import (
     parse_edit_selection_text,
 )
 from .states import AddEntryState, EditEntryState, GoalState, RemoveEntryState, SetHeightState
-from .stats import build_dashboard, compute_fat_loss_rate, parse_series
+from .stats import build_dashboard, compute_fat_loss_rate, parse_series, project_goal_date
 
 router = Router()
 
@@ -380,8 +380,15 @@ async def stats(message: Message, state: FSMContext) -> None:
         goal_fat_pct = float(user["goal_fat_pct"])
         goal_fat_weight = goal_weight * goal_fat_pct / 100
         goal_tuple = (goal_weight, goal_fat_pct, goal_fat_weight)
+    goal_projection_text = None
+    if goal_fat_weight is not None:
+        projected_date, reason = project_goal_date(series, goal_fat_weight)
+        if projected_date:
+            goal_projection_text = f"Expected day of achieving goal: {projected_date.isoformat()}"
+        elif reason:
+            goal_projection_text = f"Expected day of achieving goal: {reason}."
     fat_loss_rates = {days: compute_fat_loss_rate(raw_series, days) for days in (7, 30)}
-    summary_text = format_stats_summary(latest, latest_bmi, fat_loss_rates, goal_tuple)
+    summary_text = format_stats_summary(latest, latest_bmi, fat_loss_rates, goal_tuple, goal_projection_text)
     plot_image = build_dashboard(fat_loss_rates, series, goal_fat_weight)
     photo = BufferedInputFile(plot_image.getvalue(), filename="fat-weight.png")
     await message.answer_photo(

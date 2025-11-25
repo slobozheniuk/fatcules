@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import io
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 import math
 from typing import Iterable, Sequence
 
@@ -34,6 +34,34 @@ def average_daily_drop(series: Sequence[tuple[datetime, float]], days: int) -> f
     if delta_days <= 0:
         return None
     return (start_val - end_val) / delta_days
+
+
+def weighted_average_daily_fat_loss(
+    series: Sequence[tuple[datetime, float]],
+    days: int = 30,
+    now: datetime | None = None,
+) -> float | None:
+    if not series:
+        return None
+    now_dt = now or datetime.now(timezone.utc)
+    cutoff = now_dt - timedelta(days=days)
+    window = [(dt, value) for dt, value in series if dt >= cutoff]
+    if len(window) < 2:
+        return None
+    window.sort(key=lambda x: x[0])
+    total_change = 0.0
+    total_days = 0.0
+    prev_dt, prev_val = window[0]
+    for dt, val in window[1:]:
+        delta_days = (dt - prev_dt).total_seconds() / 86400
+        if delta_days <= 0:
+            continue
+        total_change += prev_val - val
+        total_days += delta_days
+        prev_dt, prev_val = dt, val
+    if total_days <= 0:
+        return None
+    return total_change / total_days
 
 
 def build_plot(series: Sequence[tuple[datetime, float]], summary: str) -> io.BytesIO:
@@ -75,6 +103,39 @@ def compute_fat_loss_rate(raw_entries: Sequence[dict], target_days: int) -> floa
         return None
     fat_delta = prev_fat - latest_fat
     return fat_delta / weight_delta
+
+
+def project_goal_date(
+    series: Sequence[tuple[datetime, float]],
+    goal_fat_weight: float | None,
+    *,
+    window_days: int = 30,
+    now: datetime | None = None,
+) -> tuple[date | None, str | None]:
+    if goal_fat_weight is None:
+        return None, "goal not set"
+    if not series:
+        return None, "not enough recent fat % data to project"
+    now_dt = now or datetime.now(timezone.utc)
+    cutoff = now_dt - timedelta(days=window_days)
+    recent = [(dt, value) for dt, value in series if dt >= cutoff]
+    if len(recent) < 2:
+        return None, "not enough recent fat % data to project"
+    recent.sort(key=lambda x: x[0])
+    latest_dt, latest_fat = recent[-1]
+    if latest_dt < cutoff:
+        return None, "not enough recent fat % data to project"
+    daily_loss = weighted_average_daily_fat_loss(recent, days=window_days, now=now_dt)
+    if daily_loss is None:
+        return None, "not enough recent fat % data to project"
+    if daily_loss <= 0:
+        return None, "fat trend is rising or flat"
+    remaining = latest_fat - goal_fat_weight
+    if remaining <= 0:
+        return now_dt.date(), None
+    days_needed = remaining / daily_loss
+    expected = now_dt + timedelta(days=days_needed)
+    return expected.date(), None
 
 # Do not change this method
 def _draw_gauge(ax: plt.Axes, label: str, rate: float | None) -> None:

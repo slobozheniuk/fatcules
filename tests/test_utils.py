@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 import unittest
 
 from fatcules.formatting import format_stats_summary, parse_float, parse_height_cm
-from fatcules.stats import average_daily_drop, build_dashboard, compute_fat_loss_rate, parse_series
+from fatcules.stats import average_daily_drop, build_dashboard, compute_fat_loss_rate, parse_series, project_goal_date
 
 
 class TestParsing(unittest.TestCase):
@@ -69,12 +69,48 @@ class TestStats(unittest.TestCase):
 
 class TestFormatting(unittest.TestCase):
     def test_format_stats_summary(self) -> None:
-        summary = format_stats_summary(9.9, 24.6, {7: 0.15, 30: None}, (80.0, 20.0, 16.0))
+        summary = format_stats_summary(
+            9.9, 24.6, {7: 0.15, 30: None}, (80.0, 20.0, 16.0), "Expected day of achieving goal: 2024-06-01"
+        )
         self.assertIn("Current fat weight: 9.90 kg", summary)
         self.assertIn("Latest BMI: 24.6", summary)
         self.assertIn("7d: 0.150 fat kg per kg weight", summary)
         self.assertIn("30d: not enough data", summary)
         self.assertIn("Goal: 80.0 kg @ 20.0% (fat 16.00 kg)", summary)
+        self.assertIn("Expected day of achieving goal: 2024-06-01", summary)
+
+
+class GoalProjectionTests(unittest.TestCase):
+    def test_projection_with_recent_progress(self) -> None:
+        now = datetime(2024, 5, 10, tzinfo=timezone.utc)
+        series = [
+            (now - timedelta(days=10), 20.0),
+            (now - timedelta(days=5), 17.5),
+            (now, 15.0),
+        ]
+        projected_date, reason = project_goal_date(series, 12.0, now=now)
+        self.assertEqual(projected_date, (now + timedelta(days=6)).date())
+        self.assertIsNone(reason)
+
+    def test_projection_with_gain_returns_none(self) -> None:
+        now = datetime(2024, 5, 10, tzinfo=timezone.utc)
+        series = [
+            (now - timedelta(days=7), 14.0),
+            (now, 14.5),
+        ]
+        projected_date, reason = project_goal_date(series, 12.0, now=now)
+        self.assertIsNone(projected_date)
+        self.assertEqual(reason, "fat trend is rising or flat")
+
+    def test_projection_with_stale_data_returns_none(self) -> None:
+        now = datetime(2024, 5, 10, tzinfo=timezone.utc)
+        series = [
+            (now - timedelta(days=90), 20.0),
+            (now - timedelta(days=60), 19.0),
+        ]
+        projected_date, reason = project_goal_date(series, 15.0, now=now)
+        self.assertIsNone(projected_date)
+        self.assertEqual(reason, "not enough recent fat % data to project")
 
 
 if __name__ == "__main__":

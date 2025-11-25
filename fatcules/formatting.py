@@ -38,6 +38,7 @@ def format_stats_summary(
     latest_bmi: float | None = None,
     fat_loss_rates: dict[int, float | None] | None = None,
     goal: tuple[float, float, float] | None = None,
+    goal_projection: str | None = None,
 ) -> str:
     lines: list[str] = []
     if latest_fat_weight is None:
@@ -51,6 +52,8 @@ def format_stats_summary(
     if goal:
         weight, fat_pct, fat_weight = goal
         lines.append(f"Goal: {weight:.1f} kg @ {fat_pct:.1f}% (fat {fat_weight:.2f} kg)")
+    if goal_projection:
+        lines.append(goal_projection)
     if fat_loss_rates is not None:
         lines.append("Fat loss rate:")
         for days in (7, 30):
