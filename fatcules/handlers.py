@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 
 from aiogram import F, Router
-from aiogram.filters import Command, CommandStart
+from aiogram.filters import Command, CommandStart, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import BufferedInputFile, CallbackQuery, Message, ReplyKeyboardMarkup
 
@@ -125,6 +125,9 @@ async def goal_start(message: Message, state: FSMContext) -> None:
 
 @router.message(GoalState.weight)
 async def goal_weight(message: Message, state: FSMContext) -> None:
+    if message.text == CANCEL:
+        await cancel_any(message, state)
+        return
     weight = parse_float(message.text or "")
     if weight is None or weight <= 0:
         await message.answer("Please send a valid goal weight.", reply_markup=cancel_keyboard())
@@ -136,6 +139,9 @@ async def goal_weight(message: Message, state: FSMContext) -> None:
 
 @router.message(GoalState.fat_pct)
 async def goal_fat(message: Message, state: FSMContext) -> None:
+    if message.text == CANCEL:
+        await cancel_any(message, state)
+        return
     fat_pct = parse_float(message.text or "")
     if fat_pct is None or fat_pct <= 0 or fat_pct > 100:
         await message.answer("Please send a valid fat % (0-100).", reply_markup=cancel_keyboard())
@@ -156,8 +162,8 @@ async def goal_fat(message: Message, state: FSMContext) -> None:
     )
 
 
-@router.message(Command("cancel"))
-@router.message(F.text == CANCEL)
+@router.message(Command("cancel"), StateFilter("*"))
+@router.message(F.text == CANCEL, StateFilter("*"))
 async def cancel_any(message: Message, state: FSMContext) -> None:
     await state.clear()
     await message.answer("Cancelled. Choose next action.", reply_markup=await main_keyboard_for(message))
