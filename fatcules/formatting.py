@@ -44,16 +44,18 @@ def format_stats_summary(
     if latest_fat_weight is None:
         lines.append("No fat % entries yet to build stats.")
     else:
-        lines.append(f"Current fat weight: {latest_fat_weight:.2f} kg")
+        lines.append(f"Latest fat weight: {latest_fat_weight:.2f} kg")
     if latest_bmi is None:
         lines.append("Latest BMI: set height with /set_height")
     else:
         lines.append(f"Latest BMI: {latest_bmi:.1f}")
-    if goal:
+    if goal is None:
+        lines.append("Goal: not set")
+    else:
         weight, fat_pct, fat_weight = goal
         lines.append(f"Goal: {weight:.1f} kg @ {fat_pct:.1f}% (fat {fat_weight:.2f} kg)")
-    if goal_projection:
-        lines.append(goal_projection)
+        if goal_projection:
+            lines.append(goal_projection)
     if fat_loss_rates is not None:
         lines.append("Fat loss rate:")
         for days in (7, 30):

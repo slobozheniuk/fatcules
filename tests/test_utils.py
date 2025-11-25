@@ -72,7 +72,7 @@ class TestFormatting(unittest.TestCase):
         summary = format_stats_summary(
             9.9, 24.6, {7: 0.15, 30: None}, (80.0, 20.0, 16.0), "Expected day of achieving goal: 2024-06-01"
         )
-        self.assertIn("Current fat weight: 9.90 kg", summary)
+        self.assertIn("Latest fat weight: 9.90 kg", summary)
         self.assertIn("Latest BMI: 24.6", summary)
         self.assertIn("7d: 0.150 fat kg per kg weight", summary)
         self.assertIn("30d: not enough data", summary)
